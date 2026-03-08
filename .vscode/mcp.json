@@ -1,0 +1,196 @@
+{
+	"servers": {
+		"com.atlassian/atlassian-mcp-server": {
+			"type": "http",
+			"url": "https://mcp.atlassian.com/v1/mcp",
+			"gallery": "https://api.mcp.github.com",
+			"version": "1.1.1"
+		},
+		"io.github.github/github-mcp-server": {
+			"type": "stdio",
+			"command": "docker",
+			"args": [
+				"run",
+				"-i",
+				"--rm",
+				"-e",
+				"GITHUB_PERSONAL_ACCESS_TOKEN=${input:token}",
+				"ghcr.io/github/github-mcp-server:0.32.0"
+			],
+			"gallery": "https://api.mcp.github.com",
+			"version": "0.32.0"
+		},
+		"codacy/codacy-mcp-server": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"-y",
+				"@codacy/codacy-mcp@latest"
+			],
+			"env": {
+				"CODACY_ACCOUNT_TOKEN": "${input:codacy_account_token}",
+				"CODACY_CLI_VERSION": "${input:codacy_cli_version}"
+			},
+			"gallery": "https://api.mcp.github.com",
+			"version": "1.0.0"
+		},
+		"com.vercel/vercel-mcp": {
+			"type": "http",
+			"url": "https://mcp.vercel.com",
+			"gallery": "https://api.mcp.github.com",
+			"version": "0.0.3"
+		},
+		"io.github.bytebase/dbhub": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"@bytebase/dbhub@0.17.0"
+			],
+			"env": {
+				"DSN": "${input:DSN}",
+				"DB_TYPE": "${input:DB_TYPE}",
+				"DB_HOST": "${input:DB_HOST}",
+				"DB_PORT": "${input:DB_PORT}",
+				"DB_USER": "${input:DB_USER}",
+				"DB_PASSWORD": "${input:DB_PASSWORD}",
+				"DB_NAME": "${input:DB_NAME}",
+				"TRANSPORT": "${input:TRANSPORT}",
+				"PORT": "${input:PORT}",
+				"ID": "${input:ID}",
+				"SSH_HOST": "${input:SSH_HOST}",
+				"SSH_PORT": "${input:SSH_PORT}",
+				"SSH_USER": "${input:SSH_USER}",
+				"SSH_PASSWORD": "${input:SSH_PASSWORD}",
+				"SSH_KEY": "${input:SSH_KEY}",
+				"SSH_PASSPHRASE": "${input:SSH_PASSPHRASE}"
+			},
+			"gallery": "https://api.mcp.github.com",
+			"version": "0.17.0"
+		},
+		"microsoft/playwright-mcp": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"@playwright/mcp@latest"
+			],
+			"gallery": "https://api.mcp.github.com",
+			"version": "0.0.1-seed"
+		}
+	},
+	"inputs": [
+		{
+			"id": "token",
+			"type": "promptString",
+			"description": "",
+			"password": true
+		},
+		{
+			"id": "codacy_account_token",
+			"type": "promptString",
+			"description": "Your Codacy Account API token (from app.codacy.com → Account). Required.",
+			"password": true
+		},
+		{
+			"id": "codacy_cli_version",
+			"type": "promptString",
+			"description": "Optional: pin Codacy CLI version used by local analysis (e.g., 2.3.1).",
+			"password": false
+		},
+		{
+			"id": "DSN",
+			"type": "promptString",
+			"description": "Database connection string (e.g., postgres://user:pass@host:5432/db)",
+			"password": true
+		},
+		{
+			"id": "DB_TYPE",
+			"type": "promptString",
+			"description": "Database type: postgres, mysql, mariadb, sqlserver, sqlite",
+			"password": false
+		},
+		{
+			"id": "DB_HOST",
+			"type": "promptString",
+			"description": "Database hostname",
+			"password": false
+		},
+		{
+			"id": "DB_PORT",
+			"type": "promptString",
+			"description": "Database port",
+			"password": false
+		},
+		{
+			"id": "DB_USER",
+			"type": "promptString",
+			"description": "Database username",
+			"password": false
+		},
+		{
+			"id": "DB_PASSWORD",
+			"type": "promptString",
+			"description": "Database password",
+			"password": true
+		},
+		{
+			"id": "DB_NAME",
+			"type": "promptString",
+			"description": "Database name or SQLite file path",
+			"password": false
+		},
+		{
+			"id": "TRANSPORT",
+			"type": "promptString",
+			"description": "Transport mode: stdio or http",
+			"password": false
+		},
+		{
+			"id": "PORT",
+			"type": "promptString",
+			"description": "HTTP server port (default: 8080)",
+			"password": false
+		},
+		{
+			"id": "ID",
+			"type": "promptString",
+			"description": "Instance identifier for tool names",
+			"password": false
+		},
+		{
+			"id": "SSH_HOST",
+			"type": "promptString",
+			"description": "SSH server hostname",
+			"password": false
+		},
+		{
+			"id": "SSH_PORT",
+			"type": "promptString",
+			"description": "SSH server port (default: 22)",
+			"password": false
+		},
+		{
+			"id": "SSH_USER",
+			"type": "promptString",
+			"description": "SSH username",
+			"password": false
+		},
+		{
+			"id": "SSH_PASSWORD",
+			"type": "promptString",
+			"description": "SSH password",
+			"password": true
+		},
+		{
+			"id": "SSH_KEY",
+			"type": "promptString",
+			"description": "Path to SSH private key",
+			"password": false
+		},
+		{
+			"id": "SSH_PASSPHRASE",
+			"type": "promptString",
+			"description": "SSH key passphrase",
+			"password": true
+		}
+	]
+}
