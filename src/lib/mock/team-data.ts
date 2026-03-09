@@ -177,15 +177,17 @@ export const TEAM_MEMBERS: TeamMember[] = [
   {
     id: 'tm-ayush',
     name: 'Ayush Gupta',
-    primaryRoleId: 'role-admin',
+    primaryRoleId: 'role-integration-dev',
     availableHoursPerSprint: 40,
     utilizationTargetPercent: 75,
     isActive: true,
     resourceKind: 'core',
     userSkills: [
-      { skillId: 'skill-sf-config', level: 3 },
-      { skillId: 'skill-qa',        level: 3 },
-      { skillId: 'skill-cloud',     level: 3 },
+      { skillId: 'skill-sf-dev',      level: 3 },
+      { skillId: 'skill-integration', level: 3 },
+      { skillId: 'skill-sf-config',   level: 3 },
+      { skillId: 'skill-qa',          level: 3 },
+      { skillId: 'skill-cloud',       level: 3 },
     ],
   },
   {
