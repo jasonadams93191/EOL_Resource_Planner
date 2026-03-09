@@ -8,6 +8,7 @@ import { buildSprintRoadmap } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
 import { ScenarioBar } from '@/components/ScenarioBar'
 import { PortfolioView } from '@/components/planning/PortfolioView'
+import { TimelineView } from '@/components/TimelineView'
 import type { PlanningProject, TeamMember } from '@/types/planning'
 import type { SavedScenario } from '@/lib/planning/scenario-store'
 import type { DataSourceMode } from '@/lib/planning/data-source-mode'
@@ -19,6 +20,7 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<TeamMember[]>(TEAM_MEMBERS)
   const [startDate] = useState(START_DATE)
   const [dataMode] = useState<DataSourceMode>('seed')
+  const [viewMode, setViewMode] = useState<'plan' | 'timeline'>('plan')
 
   const roadmap = useMemo(
     () => buildSprintRoadmap(projects, members, startDate),
@@ -85,13 +87,41 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Portfolio initiative cards */}
-      <div>
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">
-          Initiatives ({projects.length})
+      {/* View toggle */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-700">
+          {viewMode === 'plan' ? `Initiatives (${projects.length})` : 'Sprint Timeline'}
         </h2>
-        <PortfolioView projects={projects} members={members} roadmap={roadmap} startDate={startDate} />
+        <div className="flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden text-xs">
+          <button
+            onClick={() => setViewMode('plan')}
+            className={`px-4 py-1.5 font-medium transition-colors ${
+              viewMode === 'plan' ? 'bg-[#1a2e6b] text-white' : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            Plan View
+          </button>
+          <button
+            onClick={() => setViewMode('timeline')}
+            className={`px-4 py-1.5 font-medium transition-colors ${
+              viewMode === 'timeline' ? 'bg-[#1a2e6b] text-white' : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            Timeline
+          </button>
+        </div>
       </div>
+
+      {viewMode === 'plan' ? (
+        <PortfolioView projects={projects} members={members} roadmap={roadmap} startDate={startDate} />
+      ) : (
+        <TimelineView
+          projects={projects}
+          members={members}
+          roadmap={roadmap}
+          personBottlenecks={bottlenecks.personBottlenecks}
+        />
+      )}
 
       {/* Team capacity strip */}
       <div className="rounded-lg border border-gray-200 bg-white p-4">
