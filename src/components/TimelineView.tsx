@@ -294,7 +294,7 @@ function GanttCell({
     return (
       <td
         className={`border-r border-b border-gray-100 h-8 ${rowStyle} ${bgClass} relative`}
-        style={{ minWidth: colWidth, width: colWidth }}
+        style={{ minWidth: colWidth }}
       >
         {isTargetCol && (
           <div className="absolute inset-y-0 right-0 w-0.5 bg-[#f28c28] z-10" title="Target date" />
@@ -702,12 +702,12 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
       </div>
 
       {/* Gantt table */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-        <table className="border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
+      <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm w-full">
+        <table className="border-collapse text-xs w-full" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '220px', minWidth: '220px' }} />
             {visibleColumns.map((col) => (
-              <col key={col.key} style={{ width: `${colWidth}px`, minWidth: `${colWidth}px` }} />
+              <col key={col.key} style={{ minWidth: `${colWidth}px` }} />
             ))}
           </colgroup>
 

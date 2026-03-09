@@ -32,21 +32,23 @@ export async function GET(request: NextRequest) {
   const portfolioParam = searchParams.get('portfolio') as Portfolio | null
   const source = searchParams.get('source')
 
-  // Jira snapshot source — import from KV or in-memory store
+  // Jira snapshot — auto-detect when available; use mock only as fallback
   let baseProjects: PlanningProject[] = mockAllPlanningProjects
   let dataSource = 'mock-phase1'
 
-  if (source === 'jiraSnapshot') {
+  const useMock = source === 'mock'
+  if (!useMock) {
     const snapshots = await getAllSnapshotsAsync()
     if (snapshots['ws-eol'] || snapshots['ws-ati']) {
       const { projects: imported } = importPlanningFromJiraSnapshot(
         snapshots['ws-eol'],
         snapshots['ws-ati']
       )
-      baseProjects = imported
-      dataSource = 'jira-snapshot'
+      if (imported.length > 0) {
+        baseProjects = imported
+        dataSource = 'jira-snapshot'
+      }
     }
-    // If no snapshot available, fall through to seed data
   }
 
   // Filter by portfolio if requested
@@ -87,10 +89,21 @@ export async function POST(request: NextRequest) {
     const members: TeamMember[] = body.members ?? TEAM_MEMBERS
     const startDate: string = body.startDate ?? START_DATE
 
+    // Use Jira snapshot if available; fall back to mock
+    let allProjects: PlanningProject[] = mockAllPlanningProjects
+    const snapshots = await getAllSnapshotsAsync()
+    if (snapshots['ws-eol'] || snapshots['ws-ati']) {
+      const { projects: imported } = importPlanningFromJiraSnapshot(
+        snapshots['ws-eol'],
+        snapshots['ws-ati']
+      )
+      if (imported.length > 0) allProjects = imported
+    }
+
     // Filter projects if projectIds provided
     const projects = body.projectIds
-      ? mockAllPlanningProjects.filter((p) => body.projectIds!.includes(p.id))
-      : mockAllPlanningProjects
+      ? allProjects.filter((p) => body.projectIds!.includes(p.id))
+      : allProjects
 
     const roadmap = buildSprintRoadmap(projects, members, startDate)
     const sprintPlan = buildSprintPlan(projects, mockCapacityProfile, startDate)
@@ -102,7 +115,7 @@ export async function POST(request: NextRequest) {
       roadmap,
       sprintPlan,
       bottlenecks,
-      source: 'mock-phase1-recomputed',
+      source: allProjects === mockAllPlanningProjects ? 'mock-phase1-recomputed' : 'jira-snapshot-recomputed',
     })
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
