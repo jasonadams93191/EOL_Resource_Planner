@@ -21,6 +21,7 @@ import { mockCapacityProfile } from '@/lib/mock/sample-data'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
 import { buildSprintPlan, buildSprintRoadmap } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
+import { applyEnhancements } from '@/lib/planning/enhancements'
 import { getAllSnapshotsAsync } from '@/lib/jira/snapshot-store'
 import { importPlanningFromJiraSnapshot } from '@/lib/jira/import-snapshot'
 import type { Portfolio, TeamMember, PlanningProject } from '@/types/planning'
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
         snapshots['ws-ati']
       )
       if (imported.length > 0) {
-        baseProjects = imported
+        baseProjects = applyEnhancements(imported)
         dataSource = 'jira-snapshot'
       }
     }
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
         snapshots['ws-eol'],
         snapshots['ws-ati']
       )
-      if (imported.length > 0) allProjects = imported
+      if (imported.length > 0) allProjects = applyEnhancements(imported)
     }
 
     // Filter projects if projectIds provided
