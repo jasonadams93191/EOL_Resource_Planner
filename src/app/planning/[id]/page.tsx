@@ -547,11 +547,22 @@ export default function InitiativePage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Back link + breadcrumb */}
+      {/* Breadcrumb with status path */}
       <div className="flex items-center justify-between">
-        <div>
-          <Link href="/" className="text-sm text-indigo-600 hover:underline">← Dashboard</Link>
-          <div className="text-xs text-gray-400 mt-1">Portfolio / {project.portfolio} / {project.name}</div>
+        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+          <Link href="/projects" className="text-indigo-600 hover:underline">Projects</Link>
+          <span className="text-gray-300">/</span>
+          <span className="text-gray-500">{project.portfolio}</span>
+          <span className="text-gray-300">/</span>
+          <span className="text-gray-700 font-medium">{project.name}</span>
+          <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+            stage === 'complete' ? 'bg-emerald-100 text-emerald-700' :
+            stage === 'in-delivery' ? 'bg-green-100 text-green-700' :
+            stage === 'planned' ? 'bg-violet-100 text-violet-700' :
+            'bg-gray-100 text-gray-500'
+          }`}>
+            {stage}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {syncFlash && <span className="text-xs text-green-600">{syncFlash}</span>}

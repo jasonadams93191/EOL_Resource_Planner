@@ -19,7 +19,7 @@ import type { NextRequest } from 'next/server'
 import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { mockCapacityProfile } from '@/lib/mock/sample-data'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
-import { buildSprintPlan, buildSprintRoadmap } from '@/lib/planning/sprint-engine'
+import { buildSprintPlan, buildSprintRoadmap, computeBaselineTimeline } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
 import { applyEnhancements } from '@/lib/planning/enhancements'
 import { getAllSnapshotsAsync } from '@/lib/jira/snapshot-store'
@@ -28,6 +28,36 @@ import { getAllOverridesAsync, applyOverrides } from '@/lib/planning/override-st
 import type { Portfolio, TeamMember, PlanningProject } from '@/types/planning'
 
 const START_DATE = '2026-03-09'
+
+/**
+ * Roll up statuses: all tasks done → epic done, all epics done → initiative complete.
+ * Mutates projects in place for simplicity.
+ */
+function applyStatusRollUp(projects: PlanningProject[]): void {
+  for (const project of projects) {
+    for (const epic of project.epics) {
+      if (epic.workItems.length === 0) continue
+      const allDone = epic.workItems.every((wi) => wi.status === 'done')
+      const anyInProgress = epic.workItems.some((wi) => wi.status === 'in-progress')
+      const anyBlocked = epic.workItems.some((wi) => wi.status === 'blocked')
+      if (allDone) {
+        epic.status = 'done'
+      } else if (anyBlocked) {
+        epic.status = 'blocked'
+      } else if (anyInProgress) {
+        epic.status = 'in-progress'
+      }
+    }
+    if (project.epics.length === 0) continue
+    const allEpicsDone = project.epics.every((e) => e.status === 'done')
+    const anyEpicInProgress = project.epics.some((e) => e.status === 'in-progress' || e.status === 'done')
+    if (allEpicsDone) {
+      project.stage = 'complete'
+    } else if (anyEpicInProgress && project.stage !== 'in-delivery') {
+      project.stage = 'in-delivery'
+    }
+  }
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -59,6 +89,9 @@ export async function GET(request: NextRequest) {
     baseProjects = applyOverrides(baseProjects, storedOverrides)
   }
 
+  // Roll up statuses: tasks → epics → initiatives
+  applyStatusRollUp(baseProjects)
+
   // Filter by portfolio if requested
   const projects = portfolioParam
     ? baseProjects.filter((p) => p.portfolio === portfolioParam)
@@ -73,6 +106,9 @@ export async function GET(request: NextRequest) {
   // Analyze bottlenecks
   const bottlenecks = analyzeBottlenecks(projects, TEAM_MEMBERS, SKILLS, ROLES, roadmap)
 
+  // Single-person baseline timeline
+  const baseline = computeBaselineTimeline(projects)
+
   return NextResponse.json({
     projects,
     teamMembers: TEAM_MEMBERS,
@@ -81,6 +117,7 @@ export async function GET(request: NextRequest) {
     sprintPlan,
     roadmap,
     bottlenecks,
+    baseline,
     capacity: mockCapacityProfile,
     source: dataSource,
   })
@@ -114,6 +151,9 @@ export async function POST(request: NextRequest) {
       allProjects = applyOverrides(allProjects, storedOverrides)
     }
 
+    // Roll up statuses
+    applyStatusRollUp(allProjects)
+
     // Filter projects if projectIds provided
     const projects = body.projectIds
       ? allProjects.filter((p) => body.projectIds!.includes(p.id))
@@ -122,6 +162,7 @@ export async function POST(request: NextRequest) {
     const roadmap = buildSprintRoadmap(projects, members, startDate)
     const sprintPlan = buildSprintPlan(projects, mockCapacityProfile, startDate)
     const bottlenecks = analyzeBottlenecks(projects, members, SKILLS, ROLES, roadmap)
+    const baseline = computeBaselineTimeline(projects)
 
     return NextResponse.json({
       projects,
@@ -129,6 +170,7 @@ export async function POST(request: NextRequest) {
       roadmap,
       sprintPlan,
       bottlenecks,
+      baseline,
       source: allProjects === mockAllPlanningProjects ? 'mock-phase1-recomputed' : 'jira-snapshot-recomputed',
     })
   } catch {

@@ -8,6 +8,7 @@ import { TEAM_MEMBERS, SKILLS } from '@/lib/mock/team-data'
 import { rankCandidates, type AssignmentContext } from '@/lib/planning/assignment-engine'
 import { getSourceKind, SOURCE_BADGE_STYLES, SOURCE_BADGE_LABELS } from '@/lib/planning/source-badge'
 import type { PlanningWorkItem, PlanningEpic, PlanningProject } from '@/types/planning'
+import type { WorkItemPlacement } from '@/lib/planning/sprint-engine'
 
 type FindResult = { wi: PlanningWorkItem; epic: PlanningEpic; project: PlanningProject }
 
@@ -65,6 +66,7 @@ export default function TaskRecordPage() {
   const [result, setResult] = useState<FindResult | null | 'loading'>('loading')
   const [allProjects, setAllProjects] = useState<PlanningProject[]>(mockAllPlanningProjects)
   const [localStatus, setLocalStatus] = useState<string | null>(null)
+  const [placement, setPlacement] = useState<WorkItemPlacement | null>(null)
 
   useEffect(() => {
     const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''
@@ -74,6 +76,9 @@ export default function TaskRecordPage() {
         const projs = data.projects ?? []
         setAllProjects(projs.length > 0 ? projs : mockAllPlanningProjects)
         setResult(findWorkItem(id, projs.length > 0 ? projs : mockAllPlanningProjects))
+        // Find this work item's placement from the roadmap
+        const placements: WorkItemPlacement[] = data.roadmap?.workItemPlacements ?? []
+        setPlacement(placements.find((p: WorkItemPlacement) => p.workItemId === id) ?? null)
       })
       .catch(() => setResult(findWorkItem(id, mockAllPlanningProjects)))
   }, [params.id])
@@ -119,11 +124,21 @@ export default function TaskRecordPage() {
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/projects" className="text-indigo-600 hover:underline">← Projects</Link>
-        <span>/</span>
+      {/* Breadcrumb with statuses */}
+      <div className="flex flex-wrap items-center gap-1.5 text-sm">
+        <Link href="/projects" className="text-indigo-600 hover:underline">Projects</Link>
+        <span className="text-gray-300">/</span>
+        <Link href={`/planning/${project.id}`} className="text-indigo-600 hover:underline">{project.name}</Link>
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_STYLES[project.stage ?? 'not-started'] ?? 'bg-gray-100 text-gray-600'}`}>
+          {project.stage ?? 'backlog'}
+        </span>
+        <span className="text-gray-300">/</span>
         <Link href={`/epics/${epic.id}`} className="text-indigo-600 hover:underline">{epic.title}</Link>
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_STYLES[epic.status] ?? 'bg-gray-100 text-gray-600'}`}>
+          {epic.status}
+        </span>
+        <span className="text-gray-300">/</span>
+        <span className="text-gray-700 font-medium">{wi.title}</span>
       </div>
 
       {/* Header */}
@@ -133,6 +148,11 @@ export default function TaskRecordPage() {
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SOURCE_BADGE_STYLES[kind]}`}>
             {SOURCE_BADGE_LABELS[kind]}
           </span>
+          {wi.jira?.issueType && (
+            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 capitalize">
+              {wi.jira.issueType}
+            </span>
+          )}
           <StatusSelect value={currentStatus} onChange={handleStatusChange} />
         </div>
       </div>
@@ -163,7 +183,19 @@ export default function TaskRecordPage() {
           </div>
           <div>
             <dt className="text-gray-500">Sprint</dt>
-            <dd className="font-medium text-gray-900 mt-0.5">{wi.sprintNumber != null ? `S${wi.sprintNumber}` : '—'}</dd>
+            <dd className="font-medium text-gray-900 mt-0.5">{wi.sprintNumber != null ? `S${wi.sprintNumber}` : placement ? `S${placement.sprintNumber}` : '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-gray-500">Projected Start</dt>
+            <dd className="font-medium text-gray-900 mt-0.5">
+              {placement?.projectedStartDate ? new Date(placement.projectedStartDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-gray-500">Projected End</dt>
+            <dd className="font-medium text-gray-900 mt-0.5">
+              {placement?.projectedEndDate ? new Date(placement.projectedEndDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '—'}
+            </dd>
           </div>
           <div>
             <dt className="text-gray-500">Assignee</dt>

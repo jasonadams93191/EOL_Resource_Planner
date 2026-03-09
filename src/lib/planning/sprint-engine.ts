@@ -187,6 +187,8 @@ export interface WorkItemPlacement {
   assignedTeamMemberId?: string
   effortInSprints: number   // derived: estimatedHours / member.availableHoursPerSprint
   estimatedHours: number    // primary effort value
+  projectedStartDate?: string  // ISO date — sprint start date
+  projectedEndDate?: string    // ISO date — estimated completion within sprint
 }
 
 export interface BottleneckInfo {
@@ -199,6 +201,7 @@ export interface SprintRoadmap {
   sprints: SprintDetail[]
   workItemPlacements: WorkItemPlacement[]
   overflowItems: string[]  // workItemIds that couldn't be placed
+  blockedItems: string[]   // workItemIds blocked (directly or via dependency cascade)
   bottlenecks: BottleneckInfo[]
   totalSprints: number
   startDate: string
@@ -238,9 +241,28 @@ export function buildSprintRoadmap(
     estimatedHours: number
     priority: PlanningPriority
     primarySkill?: string
+    dependsOnWorkItemIds: string[]
+    status?: string
+  }
+
+  // ── Intra-epic auto-dependency chaining ──
+  // Within each epic, tasks execute sequentially: task[1] depends on task[0], etc.
+  // We collect these implicit deps in a map so we don't mutate source data.
+  const implicitDeps: Map<string, string[]> = new Map()
+  for (const project of sortedProjects) {
+    for (const epic of project.epics) {
+      const activeItems = epic.workItems.filter((wi) => wi.status !== 'done')
+      for (let i = 1; i < activeItems.length; i++) {
+        const existing = activeItems[i].dependsOnWorkItemIds ?? []
+        if (!existing.includes(activeItems[i - 1].id)) {
+          implicitDeps.set(activeItems[i].id, [...existing, activeItems[i - 1].id])
+        }
+      }
+    }
   }
 
   const slots: Slot[] = []
+  const statusMap: Map<string, string> = new Map()
   for (const project of sortedProjects) {
     const sortedEpics = [...project.epics].sort(
       (a, b) => (a.sequenceOrder ?? 999) - (b.sequenceOrder ?? 999)
@@ -248,18 +270,92 @@ export function buildSprintRoadmap(
     for (const epic of sortedEpics) {
       for (const item of epic.workItems) {
         if (item.status === 'done') continue
+        statusMap.set(item.id, item.status)
+        const deps = implicitDeps.get(item.id) ?? item.dependsOnWorkItemIds ?? []
         slots.push({
           projectId: project.id,
           workItemId: item.id,
           estimatedHours: item.estimatedHours,
           priority: getEffectivePriority(item, project),
           primarySkill: item.primarySkill,
+          dependsOnWorkItemIds: deps,
+          status: item.status,
         })
       }
     }
   }
 
-  slots.sort((a, b) => priorityWeight(a.priority) - priorityWeight(b.priority))
+  // ── Topological sort (Kahn's algorithm) ──
+  // Preserves priority order among items at the same dependency depth.
+  const slotMap = new Map(slots.map((s) => [s.workItemId, s]))
+  const inDegree = new Map<string, number>()
+  const dependents = new Map<string, string[]>() // depId → items that depend on it
+  for (const s of slots) {
+    inDegree.set(s.workItemId, 0)
+  }
+  for (const s of slots) {
+    let validDeps = 0
+    for (const depId of s.dependsOnWorkItemIds) {
+      if (slotMap.has(depId)) {
+        validDeps++
+        const list = dependents.get(depId) ?? []
+        list.push(s.workItemId)
+        dependents.set(depId, list)
+      }
+    }
+    inDegree.set(s.workItemId, validDeps)
+  }
+
+  // Seed queue with items that have no in-scope dependencies, sorted by priority
+  const queue: Slot[] = slots
+    .filter((s) => (inDegree.get(s.workItemId) ?? 0) === 0)
+    .sort((a, b) => priorityWeight(a.priority) - priorityWeight(b.priority))
+
+  const sorted: Slot[] = []
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    sorted.push(current)
+    for (const depId of dependents.get(current.workItemId) ?? []) {
+      const deg = (inDegree.get(depId) ?? 1) - 1
+      inDegree.set(depId, deg)
+      if (deg === 0) {
+        const depSlot = slotMap.get(depId)
+        if (depSlot) {
+          // Insert in priority order within the queue
+          const insertIdx = queue.findIndex(
+            (q) => priorityWeight(q.priority) > priorityWeight(depSlot.priority)
+          )
+          if (insertIdx === -1) queue.push(depSlot)
+          else queue.splice(insertIdx, 0, depSlot)
+        }
+      }
+    }
+  }
+
+  // Any remaining items (cycles) — append them to avoid silent drops
+  for (const s of slots) {
+    if (!sorted.find((x) => x.workItemId === s.workItemId)) {
+      sorted.push(s)
+    }
+  }
+
+  // ── Blocked cascade ──
+  // If an item is blocked, all its transitive dependents are also blocked.
+  const blockedSet = new Set<string>()
+  // First mark directly blocked items
+  for (const s of sorted) {
+    if (s.status === 'blocked') blockedSet.add(s.workItemId)
+  }
+  // Then cascade: if any dep is blocked, this item is blocked too
+  for (const s of sorted) {
+    if (blockedSet.has(s.workItemId)) continue
+    for (const depId of s.dependsOnWorkItemIds) {
+      if (blockedSet.has(depId)) {
+        blockedSet.add(s.workItemId)
+        break
+      }
+    }
+  }
 
   // Per-sprint, per-member remaining hours tracker.
   // Budget = full availableHoursPerSprint — no artificial cap.
@@ -300,13 +396,32 @@ export function buildSprintRoadmap(
     'skill-cloud':        'role-architect',
   }
 
-  for (const slot of slots) {
+  // Placement map for O(1) dependency lookups
+  const placementMap = new Map<string, WorkItemPlacement>()
+  const blockedItems: string[] = []
+
+  for (const slot of sorted) {
+    // Skip blocked items (and their cascaded dependents)
+    if (blockedSet.has(slot.workItemId)) {
+      blockedItems.push(slot.workItemId)
+      continue
+    }
+
+    // Compute earliest sprint based on dependency placements
+    let earliestSprint = 1
+    for (const depId of slot.dependsOnWorkItemIds) {
+      const depPlacement = placementMap.get(depId)
+      if (depPlacement) {
+        earliestSprint = Math.max(earliestSprint, depPlacement.sprintNumber)
+      }
+    }
+
     let placed = false
 
     // Determine which role should handle this work item (if skill is defined)
     const requiredRoleId = slot.primarySkill ? SKILL_PRIMARY_ROLE[slot.primarySkill] : undefined
 
-    for (let sprintNum = 1; sprintNum <= 52; sprintNum++) {
+    for (let sprintNum = earliestSprint; sprintNum <= 52; sprintNum++) {
       const sprintCap = getSprintHours(sprintNum)
 
       let bestMemberId: string | undefined
@@ -353,13 +468,15 @@ export function buildSprintRoadmap(
 
         sprintCap[bestMemberId] = Math.max(0, (sprintCap[bestMemberId] ?? 0) - slot.estimatedHours)
 
-        placements.push({
+        const placement: WorkItemPlacement = {
           workItemId: slot.workItemId,
           sprintNumber: sprintNum,
           assignedTeamMemberId: bestMemberId,
           effortInSprints,
           estimatedHours: slot.estimatedHours,
-        })
+        }
+        placements.push(placement)
+        placementMap.set(slot.workItemId, placement)
 
         const allocKey = `${sprintNum}:${bestMemberId}`
         if (!allocationsBySprintMember[allocKey]) {
@@ -391,6 +508,22 @@ export function buildSprintRoadmap(
   const totalSprints = Math.max(maxSprint, 13)
 
   const generatedSprints = generateSprints(totalSprints, startDate)
+
+  // Populate projected start/end dates on placements using sprint date ranges
+  const sprintDateLookup = new Map(generatedSprints.map((s) => [s.number, s]))
+  for (const p of placements) {
+    const sprint = sprintDateLookup.get(p.sprintNumber)
+    if (sprint) {
+      p.projectedStartDate = sprint.startDate
+      // End date: start + ceil(estimatedHours / (member.availableHoursPerSprint / 10)) working days
+      // Simplified: proportional position within the 14-day sprint
+      const daysInSprint = 14
+      const fractionOfSprint = Math.min(1, p.effortInSprints)
+      const daysUsed = Math.max(1, Math.ceil(fractionOfSprint * daysInSprint))
+      p.projectedEndDate = addDays(sprint.startDate, daysUsed - 1)
+    }
+  }
+
   const sprintDetails: SprintDetail[] = generatedSprints.map((s) => {
     const sprintAllocations = Object.values(allocationsBySprintMember).filter(
       (a) => a.sprintNumber === s.number
@@ -444,9 +577,148 @@ export function buildSprintRoadmap(
     sprints: sprintDetails,
     workItemPlacements: placements,
     overflowItems,
+    blockedItems,
     bottlenecks,
     totalSprints,
     startDate,
     endDate,
   }
+}
+
+// ── Baseline Timeline (single-person serial schedule) ──────────
+
+export interface BaselineTimelineItem {
+  workItemId: string
+  startDay: number
+  endDay: number
+  estimatedHours: number
+  dependsOn: string[]
+}
+
+export interface BaselineTimeline {
+  totalWorkingDays: number
+  totalHours: number
+  itemTimeline: BaselineTimelineItem[]
+  criticalPath: string[]
+}
+
+/**
+ * Compute a single-person baseline timeline: how long all work would take
+ * if one person did everything in dependency order.
+ */
+export function computeBaselineTimeline(
+  projects: PlanningProject[],
+  hoursPerDay: number = 6
+): BaselineTimeline {
+  // Collect all non-done work items and build intra-epic auto-deps
+  const allItems: Array<{ id: string; hours: number; deps: string[] }> = []
+  const epicImplicitDeps: Map<string, string[]> = new Map()
+
+  for (const project of projects) {
+    for (const epic of project.epics) {
+      const activeItems = epic.workItems.filter((wi) => wi.status !== 'done')
+      for (let i = 1; i < activeItems.length; i++) {
+        const existing = activeItems[i].dependsOnWorkItemIds ?? []
+        if (!existing.includes(activeItems[i - 1].id)) {
+          epicImplicitDeps.set(activeItems[i].id, [...existing, activeItems[i - 1].id])
+        }
+      }
+      for (const wi of activeItems) {
+        allItems.push({
+          id: wi.id,
+          hours: wi.estimatedHours,
+          deps: epicImplicitDeps.get(wi.id) ?? wi.dependsOnWorkItemIds ?? [],
+        })
+      }
+    }
+  }
+
+  const itemMap = new Map(allItems.map((it) => [it.id, it]))
+
+  // Topological sort (Kahn's)
+  const inDeg = new Map<string, number>()
+  const children = new Map<string, string[]>()
+  for (const it of allItems) {
+    inDeg.set(it.id, 0)
+  }
+  for (const it of allItems) {
+    let deg = 0
+    for (const depId of it.deps) {
+      if (itemMap.has(depId)) {
+        deg++
+        const c = children.get(depId) ?? []
+        c.push(it.id)
+        children.set(depId, c)
+      }
+    }
+    inDeg.set(it.id, deg)
+  }
+
+  const queue = allItems.filter((it) => (inDeg.get(it.id) ?? 0) === 0).map((it) => it.id)
+  const order: string[] = []
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    order.push(id)
+    for (const childId of children.get(id) ?? []) {
+      const d = (inDeg.get(childId) ?? 1) - 1
+      inDeg.set(childId, d)
+      if (d === 0) queue.push(childId)
+    }
+  }
+  // Append any remaining (cycles)
+  for (const it of allItems) {
+    if (!order.includes(it.id)) order.push(it.id)
+  }
+
+  // Schedule serially respecting dependencies
+  const endDayMap = new Map<string, number>()
+  const startDayMap = new Map<string, number>()
+  const timeline: BaselineTimelineItem[] = []
+  let cursor = 0
+  let totalHours = 0
+
+  for (const id of order) {
+    const it = itemMap.get(id)!
+    // Start after all deps finish
+    let start = cursor
+    for (const depId of it.deps) {
+      const depEnd = endDayMap.get(depId)
+      if (depEnd != null) start = Math.max(start, depEnd)
+    }
+    const duration = Math.ceil(it.hours / hoursPerDay)
+    const end = start + duration
+    startDayMap.set(id, start)
+    endDayMap.set(id, end)
+    cursor = end // serial: next item starts after this one
+    totalHours += it.hours
+    timeline.push({
+      workItemId: id,
+      startDay: start,
+      endDay: end,
+      estimatedHours: it.hours,
+      dependsOn: it.deps,
+    })
+  }
+
+  const totalWorkingDays = Math.max(...Array.from(endDayMap.values()), 0)
+
+  // Critical path: trace back from the item(s) that end on totalWorkingDays
+  const criticalPath: string[] = []
+  let traceId = timeline.find((t) => t.endDay === totalWorkingDays)?.workItemId
+  while (traceId) {
+    criticalPath.unshift(traceId)
+    const it = itemMap.get(traceId)!
+    let longestDepId: string | undefined
+    let longestEnd = -1
+    for (const depId of it.deps) {
+      const depEnd = endDayMap.get(depId) ?? -1
+      if (depEnd > longestEnd) {
+        longestEnd = depEnd
+        longestDepId = depId
+      }
+    }
+    traceId = longestDepId
+  }
+
+  return { totalWorkingDays, totalHours, itemTimeline: timeline, criticalPath }
 }

@@ -113,11 +113,16 @@ export default function EpicRecordPage() {
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/projects" className="text-indigo-600 hover:underline">← Projects</Link>
-        <span>/</span>
+      {/* Breadcrumb with statuses */}
+      <div className="flex flex-wrap items-center gap-1.5 text-sm">
+        <Link href="/projects" className="text-indigo-600 hover:underline">Projects</Link>
+        <span className="text-gray-300">/</span>
         <Link href={`/planning/${project.id}`} className="text-indigo-600 hover:underline">{project.name}</Link>
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_STYLES[project.stage ?? 'not-started'] ?? 'bg-gray-100 text-gray-600'}`}>
+          {project.stage ?? 'backlog'}
+        </span>
+        <span className="text-gray-300">/</span>
+        <span className="text-gray-700 font-medium">{epic.title}</span>
       </div>
 
       {/* Header */}
@@ -243,6 +248,7 @@ export default function EpicRecordPage() {
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-gray-600">Title</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">Status</th>
                 <th className="px-4 py-2 text-left font-medium text-gray-600">Skill</th>
                 <th className="px-4 py-2 text-right font-medium text-gray-600">Hours</th>
                 <th className="px-4 py-2 text-left font-medium text-gray-600">Confidence</th>
@@ -259,6 +265,11 @@ export default function EpicRecordPage() {
                       <Link href={`/tasks/${w.id}`} className="text-[#1a2e6b] hover:underline line-clamp-1">
                         {w.title}
                       </Link>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[w.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {w.status}
+                      </span>
                     </td>
                     <td className="px-4 py-2 text-gray-500">{w.primarySkill ?? w.skillRequired ?? '—'}</td>
                     <td className="px-4 py-2 text-right text-gray-500">{w.estimatedHours}h</td>
@@ -285,6 +296,9 @@ export default function EpicRecordPage() {
               {localTasks.map((w) => (
                 <tr key={w.id} className="hover:bg-orange-50 bg-orange-50/40">
                   <td className="px-4 py-2 text-[#1a2e6b] font-medium line-clamp-1">{w.title}</td>
+                  <td className="px-4 py-2">
+                    <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600">not-started</span>
+                  </td>
                   <td className="px-4 py-2 text-gray-500">{w.primarySkill ?? '—'}</td>
                   <td className="px-4 py-2 text-right text-gray-500">{w.estimatedHours}h</td>
                   <td className="px-4 py-2">
