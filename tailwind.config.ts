@@ -11,6 +11,12 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        // EOL.law brand colors
+        'eol-navy':  '#1a2e6b',
+        'eol-orange': '#f28c28',
+      },
+      fontFamily: {
+        sans: ['var(--font-poppins)', 'sans-serif'],
       },
     },
   },

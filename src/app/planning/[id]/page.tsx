@@ -23,6 +23,7 @@ import type {
   ProjectStage,
   PlanningType,
   PlanningWorkItem,
+  PlanningEpic,
 } from '@/types/planning'
 
 // ── Constants ─────────────────────────────────────────────────
@@ -380,6 +381,26 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
   const [planningType, setPlanningType] = useState<PlanningType | undefined>(project?.planningType)
   const [owner, setOwner] = useState<string | undefined>(project?.owner)
   const [localOverrides, setLocalOverrides] = useState<Record<string, LocalOverride>>({})
+  const [localEpics, setLocalEpics] = useState<PlanningEpic[]>([])
+  const [addingEpic, setAddingEpic] = useState(false)
+  const [newEpicTitle, setNewEpicTitle] = useState('')
+
+  function handleAddEpic() {
+    const title = newEpicTitle.trim()
+    if (!title || !project) return
+    const newEpic: PlanningEpic = {
+      id: `local-epic-${Date.now()}`,
+      planningProjectId: project.id,
+      title,
+      portfolio: project.portfolio,
+      status: 'not-started',
+      workItems: [],
+      sourceRefs: [{ sourceType: 'manual', label: 'Manual stub — added in session' }],
+    }
+    setLocalEpics((prev) => [...prev, newEpic])
+    setNewEpicTitle('')
+    setAddingEpic(false)
+  }
 
   function handleItemOverride(itemId: string, updates: LocalOverride) {
     setLocalOverrides((prev) => ({
@@ -592,11 +613,37 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
 
       {/* Epics + work items */}
       <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-gray-700">Epics & Work Items</h2>
-        {project.epics.length === 0 ? (
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700">Epics & Work Items</h2>
+          <button
+            onClick={() => setAddingEpic(true)}
+            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            + Add Epic
+          </button>
+        </div>
+
+        {/* Add epic inline form */}
+        {addingEpic && (
+          <div className="flex items-center gap-2 bg-white border border-indigo-200 rounded-lg px-4 py-3">
+            <input
+              autoFocus
+              type="text"
+              value={newEpicTitle}
+              onChange={(e) => setNewEpicTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddEpic(); if (e.key === 'Escape') setAddingEpic(false) }}
+              placeholder="Epic title…"
+              className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+            <button onClick={handleAddEpic} className="text-xs bg-indigo-600 text-white rounded px-3 py-1.5 hover:bg-indigo-700">Save</button>
+            <button onClick={() => setAddingEpic(false)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+          </div>
+        )}
+
+        {[...project.epics, ...localEpics].length === 0 ? (
           <p className="text-sm text-gray-400">No epics defined for this initiative.</p>
         ) : (
-          project.epics.map((epic) => (
+          [...project.epics, ...localEpics].map((epic) => (
             <EpicPanel
               key={epic.id}
               epic={epic}

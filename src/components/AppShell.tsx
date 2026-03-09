@@ -1,27 +1,48 @@
 'use client'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+
+const NAV = [
+  { label: 'Planning',  href: '/' },
+  { label: 'Resources', href: '/team' },
+  { label: 'Scenarios', href: '/scenarios' },
+  { label: 'Projects',  href: '/projects' },
+]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      {/* Top bar */}
-      <header className="h-12 flex items-center gap-6 px-6 bg-white border-b border-gray-200 shrink-0">
-        <Link href="/" className="font-semibold text-sm text-gray-900 hover:text-indigo-600 transition-colors">
-          AA / EOL Capacity Planner
+    <div className="flex flex-col h-screen bg-[#f8f9fc]">
+      <header className="h-14 flex items-center bg-[#1a2e6b] shrink-0 px-6 shadow-md">
+        {/* Brand */}
+        <Link href="/" className="font-bold text-sm text-white hover:text-[#f28c28] transition-colors mr-8 shrink-0 tracking-wide">
+          EOL Capacity Planner
         </Link>
-        <span className="text-gray-200">|</span>
-        <Link href="/team" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
-          Resources →
-        </Link>
-        <Link href="/scenarios" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
-          Scenarios →
-        </Link>
-        <Link href="/projects" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">
-          Projects →
-        </Link>
+
+        {/* Centered tabs */}
+        <nav className="flex-1 flex justify-center">
+          <div className="flex items-center">
+            {NAV.map(({ label, href }) => {
+              const active = href === '/' ? pathname === '/' : pathname.startsWith(href)
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`px-5 h-14 flex items-center text-sm font-medium border-b-2 transition-colors ${
+                    active
+                      ? 'border-[#f28c28] text-white'
+                      : 'border-transparent text-blue-200 hover:text-white hover:border-blue-300'
+                  }`}
+                >
+                  {label}
+                </Link>
+              )
+            })}
+          </div>
+        </nav>
       </header>
 
-      {/* Main content */}
       <main className="flex-1 overflow-auto p-6">{children}</main>
     </div>
   )

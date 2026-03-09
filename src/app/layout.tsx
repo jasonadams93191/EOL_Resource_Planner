@@ -1,9 +1,13 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Poppins } from 'next/font/google'
 import './globals.css'
 import { AppShell } from '@/components/AppShell'
 
-const inter = Inter({ subsets: ['latin'] })
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-poppins',
+})
 
 export const metadata: Metadata = {
   title: 'AA / EOL Capacity Planner',
@@ -13,7 +17,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={poppins.variable}>
         <AppShell>{children}</AppShell>
       </body>
     </html>
