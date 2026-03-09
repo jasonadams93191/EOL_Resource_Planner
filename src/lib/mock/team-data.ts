@@ -55,6 +55,7 @@ export const ROLES: Role[] = [
   { id: 'role-ba',              name: 'Business Analyst' },
   { id: 'role-integration-dev', name: 'Integration Specialist' },
   { id: 'role-architect',       name: 'Architect' },
+  { id: 'role-prompt-engineer', name: 'Prompt Engineer' },
 ]
 
 // ── Team Members ──────────────────────────────────────────────
@@ -94,7 +95,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-jason',
     name: 'Jason',
     primaryRoleId: 'role-pm',
-    coversRoles: ['role-admin', 'role-integration-dev', 'role-ba', 'role-architect'],
+    coversRoles: ['role-admin', 'role-integration-dev', 'role-ba', 'role-architect', 'role-prompt-engineer'],
     availableHoursPerSprint: 40,
     utilizationTargetPercent: 55,
     isActive: true,

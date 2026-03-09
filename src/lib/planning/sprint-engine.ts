@@ -296,7 +296,7 @@ export function buildSprintRoadmap(
     'skill-qa':           'role-ba',
     'skill-docs':         'role-pm',
     'skill-pm':           'role-pm',
-    'skill-ai':           'role-architect',
+    'skill-ai':           'role-prompt-engineer',
     'skill-cloud':        'role-architect',
   }
 
