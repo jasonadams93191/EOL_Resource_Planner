@@ -93,8 +93,7 @@ export function getLLMConfig(): LLMConfig {
   return {
     enabled: env('LLM_ENABLE') !== 'false',
     provider: env('LLM_PROVIDER') || 'anthropic',
-    // Default to Haiku for cost-efficiency; override with ANTHROPIC_MODEL
-    model: env('ANTHROPIC_MODEL') || 'claude-haiku-4-5-20251001',
+    model: env('ANTHROPIC_MODEL') || 'claude-opus-4-6',
     maxInitiativesPerRun: parseInt(env('LLM_MAX_INITIATIVES_PER_RUN') || '20', 10),
     maxCharsPerInitiative: parseInt(env('LLM_MAX_CHARS_PER_INITIATIVE') || '20000', 10),
   }
