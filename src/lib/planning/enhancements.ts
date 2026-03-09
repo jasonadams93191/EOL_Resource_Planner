@@ -355,6 +355,32 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
   ],
 }
 
+// ── Initiative → default skill/role mapping ──────────────────
+// Applied to Jira-imported work items whose skill/role are still
+// at the generic default (skill-sf-config / DEVELOPER).
+
+const INITIATIVE_SKILL_DEFAULTS: Record<string, { skill: string; role: ResourceType }> = {
+  'pp-noca-ai':           { skill: 'skill-ai',          role: ResourceType.DEVELOPER },
+  'pp-voice-ai':          { skill: 'skill-ai',          role: ResourceType.DEVELOPER },
+  'pp-tiktok-ads':        { skill: 'skill-integration', role: ResourceType.DEVELOPER },
+  'pp-fb-ads':            { skill: 'skill-integration', role: ResourceType.DEVELOPER },
+  'pp-docrio':            { skill: 'skill-integration', role: ResourceType.DEVELOPER },
+  'pp-outbound-webhooks': { skill: 'skill-sf-dev',      role: ResourceType.DEVELOPER },
+  'pp-sf-flow-refactor':  { skill: 'skill-sf-dev',      role: ResourceType.DEVELOPER },
+  'pp-booking-engine':    { skill: 'skill-sf-config',   role: ResourceType.DEVELOPER },
+  'pp-sales-cadences':    { skill: 'skill-sf-config',   role: ResourceType.DEVELOPER },
+  'pp-ai-litify':         { skill: 'skill-ai',          role: ResourceType.DEVELOPER },
+  'pp-doctors-map':       { skill: 'skill-sf-dev',      role: ResourceType.DEVELOPER },
+  'pp-eol-campaigns':     { skill: 'skill-reporting',   role: ResourceType.ADMIN },
+  'pp-hona':              { skill: 'skill-integration', role: ResourceType.DEVELOPER },
+  'pp-evenup':            { skill: 'skill-integration', role: ResourceType.DEVELOPER },
+  'pp-aa-survey':         { skill: 'skill-integration', role: ResourceType.DEVELOPER },
+  'pp-regal':             { skill: 'skill-integration', role: ResourceType.DEVELOPER },
+  'pp-aws-metadata':      { skill: 'skill-integration', role: ResourceType.DEVELOPER },
+  'pp-eo-law-app':        { skill: 'skill-sf-config',   role: ResourceType.DEVELOPER },
+  'pp-litify-ui':         { skill: 'skill-sf-config',   role: ResourceType.DEVELOPER },
+}
+
 // ── Epic → template category mapping ─────────────────────────
 
 const EPIC_TEMPLATE_MAP: Record<string, string> = {
@@ -605,6 +631,24 @@ export function applyEnhancementsWithStats(
     let projectTasksAdded = 0
     let projectFieldsUpdated = 0
     let projectOverridesPreserved = 0
+
+    // Apply initiative-level skill/role defaults to Jira-imported items
+    const skillDefaults = INITIATIVE_SKILL_DEFAULTS[project.id]
+    if (skillDefaults) {
+      for (const epic of project.epics) {
+        for (const wi of epic.workItems) {
+          if (wi.assumedSkill !== false && wi.primarySkill === 'skill-sf-config' && skillDefaults.skill !== 'skill-sf-config') {
+            wi.primarySkill = skillDefaults.skill
+            wi.assumedSkill = true
+            projectFieldsUpdated++
+          }
+          if (wi.primaryRole === ResourceType.DEVELOPER && skillDefaults.role !== ResourceType.DEVELOPER) {
+            wi.primaryRole = skillDefaults.role
+            projectFieldsUpdated++
+          }
+        }
+      }
+    }
 
     const enhancedEpics = project.epics.map((epic) => {
       const inject = shouldInjectTemplates(epic, existingTotal, seededTotal)

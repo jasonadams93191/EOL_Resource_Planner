@@ -35,6 +35,27 @@ import type {
 } from '@/types/planning'
 import { ResourceType } from '@/types/domain'
 
+// ── Jira Account ID → Team Member ID mapping ─────────────────
+// Maps Jira cloud accountIds to internal team member IDs (tm-*).
+// This allows the sprint engine to properly assign and track capacity.
+
+const JIRA_ACCOUNT_TO_TEAM: Record<string, string> = {
+  '712020:1f9706a6-53e8-4109-bf33-fd0aee5aa935': 'tm-jusiah',
+  '712020:353816d3-b5da-42d0-ae84-45290f8cf022': 'tm-daniel',
+  '712020:b75ce1c1-e78a-4720-992e-7c32c65d3951': 'tm-leslie',
+  '712020:304b2eb7-e029-4ae9-a274-6a3ff5555eb5': 'tm-ryan',
+  '712020:14bde61e-d7cb-4fc6-8320-36718520ebb1': 'tm-stefan',
+  '712020:bcacd152-43fe-4c92-a4c1-ac85f8134b1e': 'tm-lord',
+  '712020:41800951-5299-43ee-86d6-65809c7d7cdc': 'tm-jeeleigh',
+  '712020:97a0bed9-e494-4fcc-8cbe-e1f10bda1ad3': 'tm-kumar',
+  '712020:01bbca83-3b2a-4a0a-abcd-8b7aa7761662': 'tm-ayush',
+}
+
+function resolveAssignee(jiraAccountId?: string): string | undefined {
+  if (!jiraAccountId) return undefined
+  return JIRA_ACCOUNT_TO_TEAM[jiraAccountId] ?? jiraAccountId
+}
+
 // ── Raw issue → JiraIssueData ─────────────────────────────────
 
 function rawToJiraIssueData(issue: RawJiraIssue, projectKey: 'EOL' | 'ATI'): JiraIssueData {
@@ -105,7 +126,7 @@ function rawToWorkItem(
     planningEpicId,
     status: toPlanningStatus(f.status?.name?.toLowerCase().replace(/\s+/g, '-') ?? ''),
     priority: toPlanningPriority(f.priority?.name?.toLowerCase() ?? ''),
-    assigneeId: f.assignee?.accountId,
+    assigneeId: resolveAssignee(f.assignee?.accountId),
     sourceRefs: [sourceRef],
     estimatedHours: 8,       // default; analysis engine may refine
     confidence: 'low',

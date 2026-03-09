@@ -110,6 +110,7 @@ export function buildSprintPlan(
     )
     for (const epic of sortedEpics) {
       for (const item of epic.workItems) {
+        if (item.status === 'done') continue  // done tasks don't consume capacity
         slots.push({
           projectId: project.id,
           workItemId: item.id,
@@ -400,6 +401,22 @@ export function buildSprintRoadmap(
   const placementMap = new Map<string, WorkItemPlacement>()
   const blockedItems: string[] = []
 
+  // Track which initiatives (projectIds) each member is working on per sprint.
+  // Constraint: max 3 initiatives per person per sprint to prevent context-switching.
+  const MAX_INITIATIVES_PER_MEMBER = 3
+  const memberInitiativesBySprint: Record<string, Set<string>> = {} // key: `sprint:memberId`
+  const getInitiatives = (sprintNum: number, memberId: string): Set<string> => {
+    const key = `${sprintNum}:${memberId}`
+    if (!memberInitiativesBySprint[key]) memberInitiativesBySprint[key] = new Set()
+    return memberInitiativesBySprint[key]
+  }
+
+  // Map workItemId → projectId for initiative tracking
+  const workItemToProject: Record<string, string> = {}
+  for (const slot of sorted) {
+    workItemToProject[slot.workItemId] = slot.projectId
+  }
+
   for (const slot of sorted) {
     // Skip blocked items (and their cascaded dependents)
     if (blockedSet.has(slot.workItemId)) {
@@ -453,6 +470,10 @@ export function buildSprintRoadmap(
 
         if (slot.primarySkill && skillLevel === 0) continue  // member lacks the skill entirely
 
+        // Initiative cap: max 3 initiatives per member per sprint
+        const memberInits = getInitiatives(sprintNum, member.id)
+        if (!memberInits.has(slot.projectId) && memberInits.size >= MAX_INITIATIVES_PER_MEMBER) continue
+
         // Score: prefer higher skill level first (top candidates), then most remaining hours
         // This ensures higher-skilled members are assigned before less-skilled ones
         const score = skillLevel * 1000 + remaining
@@ -467,6 +488,9 @@ export function buildSprintRoadmap(
         const effortInSprints = slot.estimatedHours / member.availableHoursPerSprint
 
         sprintCap[bestMemberId] = Math.max(0, (sprintCap[bestMemberId] ?? 0) - slot.estimatedHours)
+
+        // Record initiative for the member in this sprint
+        getInitiatives(sprintNum, bestMemberId).add(slot.projectId)
 
         const placement: WorkItemPlacement = {
           workItemId: slot.workItemId,
