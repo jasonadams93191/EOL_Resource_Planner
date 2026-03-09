@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { TeamMember, PlanningProject } from '@/types/planning'
+import type { TeamMember, PlanningProject, PlanningPriority } from '@/types/planning'
 
 interface ScenarioState {
   members: TeamMember[]
@@ -25,6 +25,7 @@ export function ScenarioControls({
   isComputing = false,
 }: ScenarioControlsProps) {
   const [members, setMembers] = useState<TeamMember[]>(initialMembers)
+  const [projects, setProjects] = useState<PlanningProject[]>(initialProjects)
   const [scenarioStartDate, setScenarioStartDate] = useState(startDate)
 
   function updateCapacity(memberId: string, capacity: number) {
@@ -43,8 +44,15 @@ export function ScenarioControls({
     )
   }
 
+  function updateProjectPriority(projectId: string, priority: PlanningPriority) {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, priority } : p))
+    )
+  }
+
   function reset() {
     setMembers(initialMembers)
+    setProjects(initialProjects)
     setScenarioStartDate(startDate)
   }
 
@@ -64,6 +72,27 @@ export function ScenarioControls({
           onChange={(e) => setScenarioStartDate(e.target.value)}
           className="rounded border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
+      </div>
+
+      {/* Project priority overrides */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">Initiative Priorities</h3>
+        <div className="space-y-2">
+          {projects.map((project) => (
+            <div key={project.id} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3">
+              <span className="text-sm text-gray-800 flex-1 min-w-0 truncate">{project.name}</span>
+              <select
+                value={project.priority}
+                onChange={(e) => updateProjectPriority(project.id, e.target.value as PlanningPriority)}
+                className="rounded border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Member capacity sliders */}
@@ -118,7 +147,7 @@ export function ScenarioControls({
       {/* Action buttons */}
       <div className="flex gap-3 pt-2">
         <button
-          onClick={() => onRecompute({ members, projects: initialProjects, startDate: scenarioStartDate })}
+          onClick={() => onRecompute({ members, projects, startDate: scenarioStartDate })}
           disabled={isComputing}
           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
         >

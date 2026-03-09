@@ -81,7 +81,7 @@ export default function PlanningPage() {
 
       {/* Tab content */}
       {activeTab === 'portfolio' && (
-        <PortfolioView projects={mockAllPlanningProjects} />
+        <PortfolioView projects={scenarioProjects} />
       )}
 
       {activeTab === 'projects' && (
