@@ -1,10 +1,21 @@
 import { StatusCard } from '@/components/StatusCard'
-import { mockProjects, mockIssues, mockResources, mockEpics } from '@/lib/mock/sample-data'
+import { mockProjects, mockIssues, mockEpics, mockCapacityProfile } from '@/lib/mock/sample-data'
+import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
+import { TEAM_MEMBERS } from '@/lib/mock/team-data'
+import { buildSprintPlan } from '@/lib/planning/sprint-engine'
 
 export default function OverviewPage() {
   const activeProjects = mockProjects.filter((p) => p.status === 'active').length
   const openIssues = mockIssues.filter((i) => i.status !== 'done').length
   const inProgressEpics = mockEpics.filter((e) => e.status === 'in-progress').length
+
+  // Planning summary
+  const sprintPlan = buildSprintPlan(mockAllPlanningProjects, mockCapacityProfile, '2026-03-09')
+  const totalPlanningItems = mockAllPlanningProjects.reduce(
+    (s, p) => s + p.epics.reduce((se, e) => se + e.workItems.length, 0),
+    0
+  )
+  const activeTeamMembers = TEAM_MEMBERS.filter((m) => m.isActive).length
 
   return (
     <div className="space-y-6">
@@ -26,10 +37,10 @@ export default function OverviewPage() {
         />
         <StatusCard
           title="Team Members"
-          value={mockResources.length}
-          subtitle="shared resource pool"
+          value={activeTeamMembers}
+          subtitle="active in sprint model"
           status="neutral"
-          href="/settings"
+          href="/planning"
         />
         <StatusCard
           title="In-Progress Epics"
@@ -37,6 +48,37 @@ export default function OverviewPage() {
           status="active"
           href="/timeline"
         />
+      </div>
+
+      {/* Planning summary card */}
+      <div className="rounded-lg border border-violet-200 bg-violet-50 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-medium text-violet-900 mb-1">Planning Engine — Phase 1</h3>
+            <p className="text-sm text-violet-800">
+              {mockAllPlanningProjects.length} planning projects · {totalPlanningItems} work items across{' '}
+              {sprintPlan.totalSprints} sprints · {activeTeamMembers} team members
+            </p>
+            <div className="mt-2 flex gap-2 flex-wrap">
+              {mockAllPlanningProjects.map((p) => (
+                <span
+                  key={p.id}
+                  className="inline-flex items-center gap-1 rounded bg-white border border-violet-200 px-2 py-0.5 text-xs text-violet-700"
+                >
+                  {p.name}
+                  <span className="text-violet-400">·</span>
+                  <span className="text-violet-500">{p.portfolio}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+          <a
+            href="/planning"
+            className="shrink-0 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700 transition-colors"
+          >
+            View Planning
+          </a>
+        </div>
       </div>
 
       <div className="rounded-lg bg-blue-50 border border-blue-200 p-5">
@@ -47,14 +89,14 @@ export default function OverviewPage() {
           Use it to estimate effort, view delivery timelines, and model staffing scenarios.
         </p>
         <p className="text-xs text-blue-600 mt-3">
-          Wave 1 — All data is mock. Wave 2 will connect live Jira workspaces.
+          Phase 1 — All data is mock. Wave 2 will connect live Jira workspaces.
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
+          { href: '/planning', label: 'View Planning', desc: 'Sprint plan + work items' },
           { href: '/projects', label: 'View Projects', desc: 'Browse work by workspace' },
-          { href: '/timeline', label: 'View Timeline', desc: 'Shared resource workload' },
           { href: '/scenarios', label: 'Run Scenarios', desc: 'Model staffing changes' },
           { href: '/settings', label: 'Settings', desc: 'Capacity assumptions' },
         ].map((link) => (

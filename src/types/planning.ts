@@ -18,7 +18,115 @@
 //   - We never write back to Jira — this is a read/plan layer only
 // ============================================================
 
-import type { WorkspaceId, ProjectKey } from './domain'
+import type { WorkspaceId, ProjectKey, ResourceType } from './domain'
+
+// ── Effort Size ────────────────────────────────────────────────
+// T-shirt sizing mapped to sprint fractions.
+export type EffortSize = 'XS' | 'S' | 'M' | 'L' | 'XL'
+export const EFFORT_SIZE_SPRINTS: Record<EffortSize, number> = {
+  XS: 0.25,
+  S: 0.5,
+  M: 1.0,
+  L: 2.0,
+  XL: 3.0,
+}
+
+// ── Skill Level ────────────────────────────────────────────────
+// 0 = None, 1 = Awareness, 2 = Working, 3 = Strong, 4 = Expert
+export type SkillLevel = 0 | 1 | 2 | 3 | 4
+export const SKILL_LEVEL_LABELS: Record<SkillLevel, string> = {
+  0: 'None',
+  1: 'Awareness',
+  2: 'Working',
+  3: 'Strong',
+  4: 'Expert',
+}
+
+// ── Skill ──────────────────────────────────────────────────────
+export interface Skill {
+  id: string
+  name: string
+  category?: string
+}
+
+// ── User Skill ─────────────────────────────────────────────────
+// A team member's proficiency in a specific skill.
+export interface UserSkill {
+  skillId: string
+  level: SkillLevel
+}
+
+// ── Role ───────────────────────────────────────────────────────
+export interface Role {
+  id: string
+  name: string
+  description?: string
+}
+
+// ── Team Member ────────────────────────────────────────────────
+// Replaces the old Resource type for planning purposes.
+// sprintCapacity is a fraction of a sprint (1.0 = full, 0.5 = half).
+export interface TeamMember {
+  id: string
+  name: string
+  primaryRoleId: string
+  userSkills: UserSkill[]
+  sprintCapacity: number
+  isActive: boolean
+  inactiveReason?: string
+  inactiveDate?: string
+}
+
+// ── Capacity Allocation ────────────────────────────────────────
+// Tracks how much of a sprint a team member is allocated.
+export interface CapacityAllocation {
+  teamMemberId: string
+  sprintNumber: number
+  allocatedSprints: number
+  workItemIds: string[]
+}
+
+// ── Assignment Score Breakdown ─────────────────────────────────
+// Per-candidate scoring across 7 weighted dimensions (total: 100 pts).
+export interface AssignmentScoreBreakdown {
+  teamMemberId: string
+  totalScore: number         // 0–100
+  skillMatch: number         // 0–35
+  skillLevelMatch: number    // 0–20
+  domainFamiliarity: number  // 0–15
+  roleFit: number            // 0–10
+  capacityAvailability: number // 0–10
+  continuity: number         // 0–5
+  priorityUrgencyFit: number // 0–5
+  explanation: string
+}
+
+// ── Work Item Estimate ─────────────────────────────────────────
+// Sprint-level estimate for a work item with candidate assignments.
+export interface WorkItemEstimate {
+  workItemId: string
+  effortSize: EffortSize
+  effortInSprints: number
+  confidence: 'low' | 'medium' | 'high'
+  splitRecommended: boolean
+  candidateAssignees: AssignmentScoreBreakdown[]
+  suggestedAssigneeId?: string
+}
+
+// ── Portfolio ──────────────────────────────────────────────────
+// Which portfolio a project/epic belongs to.
+// EOL = EOL Tech Team work, ATI = AA/TKO Projects work,
+// cross-workspace = spans both workspaces.
+export type Portfolio = 'EOL' | 'ATI' | 'cross-workspace'
+
+// ── Sprint ─────────────────────────────────────────────────────
+// A 2-week planning sprint with capacity for the full team.
+export interface Sprint {
+  number: number
+  startDate: string // ISO date
+  endDate: string // ISO date
+  capacityHours: number // total team capacity for this sprint
+}
 
 // ── Source Reference ─────────────────────────────────────────
 // Traces a planning item back to its Jira origin, or marks it as manual.
@@ -59,6 +167,23 @@ export interface PlanningWorkItem {
   // All Jira issues (or manual entries) that this item is derived from
   sourceRefs: PlanningSourceRef[]
   notes?: string
+  // Phase 1 planning engine fields
+  effortHours: number // estimated effort in hours
+  confidence: 'low' | 'medium' | 'high' // estimation confidence
+  primaryRole: ResourceType // which resource type should do this work
+  skillRequired?: string // optional human-readable skill label
+  sprintNumber?: number // which sprint this work item is assigned to
+  // Phase 1 skill/assignment fields (optional — added progressively)
+  description?: string
+  primarySkill?: string       // skill id from SKILLS
+  secondarySkill?: string     // secondary skill id
+  requiredSkillLevel?: SkillLevel
+  domainTag?: string          // domain grouping label (e.g. 'litify', 'sales-cloud')
+  urgency?: 'critical' | 'high' | 'normal' | 'low'
+  effortInSprints?: number    // effort expressed as sprint fractions
+  candidateAssigneeIds?: string[]
+  dependsOnWorkItemIds?: string[]
+  splitRecommended?: boolean
 }
 
 // ── Planning Epic ─────────────────────────────────────────────
@@ -77,6 +202,9 @@ export interface PlanningEpic {
   // Source refs at the epic level (the Jira epics or issues this aggregates)
   sourceRefs: PlanningSourceRef[]
   notes?: string
+  // Phase 1 fields
+  portfolio: Portfolio // which portfolio this epic belongs to
+  estimatedSprints?: number // how many sprints this epic spans
 }
 
 // ── Planning Project ──────────────────────────────────────────
@@ -92,4 +220,6 @@ export interface PlanningProject {
   // Source refs at the project level (the Jira projects this aggregates)
   sourceRefs: PlanningSourceRef[]
   notes?: string
+  // Phase 1 fields
+  portfolio: Portfolio // derived from source workspaces
 }

@@ -21,6 +21,7 @@
 // ============================================================
 
 import type { Issue, Epic } from '@/types/domain'
+import { ResourceType } from '@/types/domain'
 import type {
   PlanningProject,
   PlanningEpic,
@@ -28,6 +29,7 @@ import type {
   PlanningSourceRef,
   PlanningStatus,
   PlanningPriority,
+  Portfolio,
 } from '@/types/planning'
 
 // ── Status / Priority Maps ────────────────────────────────────
@@ -103,6 +105,10 @@ export function normalizePlanningWorkItem(
     assigneeId: issue.assigneeId,
     sourceRefs: [jiraIssueRef(issue)],
     notes: undefined,
+    // Required Phase 1 fields — defaults that callers can override
+    effortHours: 8,
+    confidence: 'low',
+    primaryRole: ResourceType.DEVELOPER,
     ...overrides,
   }
 }
@@ -117,6 +123,7 @@ export function normalizePlanningEpic(
   epic: Epic,
   issues: Issue[],
   planningProjectId: string,
+  portfolio: Portfolio,
   overrides?: Partial<Omit<PlanningEpic, 'workItems'>>
 ): PlanningEpic {
   const epicId = `pe-${epic.id}`
@@ -138,6 +145,7 @@ export function normalizePlanningEpic(
     planningProjectId,
     status: derivedStatus,
     priority: toPlanningPriority(epic.priority),
+    portfolio,
     workItems,
     sourceRefs: [jiraEpicRef(epic)],
     notes: undefined,
@@ -155,7 +163,8 @@ export function normalizePlanningProject(
   name: string,
   epics: PlanningEpic[],
   sourceRefs: PlanningSourceRef[],
-  overrides?: Partial<Omit<PlanningProject, 'epics' | 'sourceRefs'>>
+  portfolio: Portfolio,
+  overrides?: Partial<Omit<PlanningProject, 'epics' | 'sourceRefs' | 'portfolio'>>
 ): PlanningProject {
   const statuses = epics.map((e) => e.status)
   const derivedStatus: PlanningStatus = statuses.includes('blocked')
@@ -170,6 +179,7 @@ export function normalizePlanningProject(
     id,
     name,
     status: derivedStatus,
+    portfolio,
     epics,
     sourceRefs,
     ...overrides,
