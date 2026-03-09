@@ -61,12 +61,40 @@ function StatusSelect({
   )
 }
 
+interface EditableFields {
+  status: string
+  estimatedHours: number
+  priority: string
+  confidence: string
+  assigneeId: string | null
+  primarySkill: string | null
+}
+
 export default function TaskRecordPage() {
   const params = useParams()
   const [result, setResult] = useState<FindResult | null | 'loading'>('loading')
   const [allProjects, setAllProjects] = useState<PlanningProject[]>(mockAllPlanningProjects)
   const [localStatus, setLocalStatus] = useState<string | null>(null)
   const [placement, setPlacement] = useState<WorkItemPlacement | null>(null)
+  const [edits, setEdits] = useState<Partial<EditableFields>>({})
+  const [saving, setSaving] = useState(false)
+  const [saveFlash, setSaveFlash] = useState('')
+
+  const hasEdits = Object.keys(edits).length > 0
+
+  const handleSave = async () => {
+    if (!result || result === 'loading' || !hasEdits) return
+    const { wi } = result
+    setSaving(true)
+    try {
+      await saveOverride(wi.id, 'work-item', edits)
+      setSaveFlash('Saved')
+      setEdits({})
+      setTimeout(() => setSaveFlash(''), 2000)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   useEffect(() => {
     const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''
@@ -98,14 +126,19 @@ export default function TaskRecordPage() {
 
   const { wi, epic, project } = result
   const kind = getSourceKind(wi.id, !!wi.jira?.issueKey)
-  const currentStatus = localStatus ?? wi.status
+  const currentStatus = edits.status ?? localStatus ?? wi.status
+  const currentHours = edits.estimatedHours ?? wi.estimatedHours
+  const currentPriority = edits.priority ?? wi.priority ?? project.priority
+  const currentConfidence = edits.confidence ?? wi.confidence
+  const currentAssigneeId = edits.assigneeId !== undefined ? edits.assigneeId : wi.assigneeId
+  const currentSkill = edits.primarySkill !== undefined ? edits.primarySkill : wi.primarySkill
 
-  const handleStatusChange = async (newStatus: string) => {
+  const handleStatusChange = (newStatus: string) => {
     setLocalStatus(newStatus)
-    await saveOverride(wi.id, 'work-item', { status: newStatus })
+    setEdits((prev) => ({ ...prev, status: newStatus }))
   }
 
-  const assignee = wi.assigneeId ? TEAM_MEMBERS.find((m) => m.id === wi.assigneeId) : null
+  const assignee = currentAssigneeId ? TEAM_MEMBERS.find((m) => m.id === currentAssigneeId) : null
 
   // Assignment recommendations
   const context: AssignmentContext = {
@@ -157,28 +190,65 @@ export default function TaskRecordPage() {
         </div>
       </div>
 
-      {/* Details card */}
+      {/* Details card — editable fields */}
       <div className="rounded-lg border border-gray-200 bg-white p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Details</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-700">Details</h3>
+          <div className="flex items-center gap-2">
+            {saveFlash && <span className="text-xs text-green-600">{saveFlash}</span>}
+            {hasEdits && (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className={`rounded px-3 py-1 text-xs font-medium text-white transition-colors ${
+                  saving ? 'bg-gray-400 cursor-wait' : 'bg-[#f28c28] hover:bg-[#d97a20]'
+                }`}
+              >
+                {saving ? 'Saving…' : 'Save Changes'}
+              </button>
+            )}
+          </div>
+        </div>
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <dt className="text-gray-500">Hours</dt>
-            <dd className="font-medium text-gray-900 mt-0.5">{wi.estimatedHours}h</dd>
+            <dd className="mt-0.5">
+              <input
+                type="number"
+                min={1}
+                value={currentHours}
+                onChange={(e) => setEdits((prev) => ({ ...prev, estimatedHours: parseInt(e.target.value) || wi.estimatedHours }))}
+                className="w-20 rounded border border-gray-200 px-2 py-0.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </dd>
           </div>
           <div>
             <dt className="text-gray-500">Confidence</dt>
             <dd className="mt-0.5">
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                wi.confidence === 'high'   ? 'bg-green-100 text-green-700' :
-                wi.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                            'bg-red-100 text-red-700'
-              }`}>{wi.confidence}</span>
+              <select
+                value={currentConfidence}
+                onChange={(e) => setEdits((prev) => ({ ...prev, confidence: e.target.value }))}
+                className={`rounded-full px-2 py-0.5 text-xs font-medium border-0 cursor-pointer ${
+                  currentConfidence === 'high'   ? 'bg-green-100 text-green-700' :
+                  currentConfidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                                   'bg-red-100 text-red-700'
+                }`}
+              >
+                {['high', 'medium', 'low'].map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
             </dd>
           </div>
           <div>
             <dt className="text-gray-500">Skill</dt>
-            <dd className="font-medium text-gray-900 mt-0.5">
-              {wi.primarySkill ? (SKILLS.find((s) => s.id === wi.primarySkill)?.name ?? wi.primarySkill) : wi.skillRequired ?? '—'}
+            <dd className="mt-0.5">
+              <select
+                value={currentSkill ?? ''}
+                onChange={(e) => setEdits((prev) => ({ ...prev, primarySkill: e.target.value || null }))}
+                className="rounded border border-gray-200 px-2 py-0.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">— None —</option>
+                {SKILLS.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
             </dd>
           </div>
           <div>
@@ -199,17 +269,32 @@ export default function TaskRecordPage() {
           </div>
           <div>
             <dt className="text-gray-500">Assignee</dt>
-            <dd className="font-medium text-gray-900 mt-0.5">
-              {assignee ? (
-                <Link href={`/team/${assignee.id}`} className="text-indigo-600 hover:underline">
-                  {assignee.name}
-                </Link>
-              ) : '—'}
+            <dd className="mt-0.5">
+              <select
+                value={currentAssigneeId ?? ''}
+                onChange={(e) => setEdits((prev) => ({ ...prev, assigneeId: e.target.value || null }))}
+                className="rounded border border-gray-200 px-2 py-0.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">— Unassigned —</option>
+                {TEAM_MEMBERS.filter((m) => m.isActive).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
             </dd>
           </div>
           <div>
             <dt className="text-gray-500">Priority</dt>
-            <dd className="font-medium text-gray-900 mt-0.5 capitalize">{wi.priority ?? project.priority}</dd>
+            <dd className="mt-0.5">
+              <select
+                value={currentPriority}
+                onChange={(e) => setEdits((prev) => ({ ...prev, priority: e.target.value }))}
+                className={`rounded-full px-2 py-0.5 text-xs font-medium border-0 cursor-pointer capitalize ${
+                  currentPriority === 'high'   ? 'bg-red-100 text-red-700' :
+                  currentPriority === 'medium' ? 'bg-amber-100 text-amber-700' :
+                                                  'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {['high', 'medium', 'low'].map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </dd>
           </div>
           <div>
             <dt className="text-gray-500">Initiative</dt>

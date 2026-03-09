@@ -48,6 +48,13 @@ export default function EpicRecordPage() {
   const [localTasks, setLocalTasks] = useState<PlanningWorkItem[]>([])
   const [addingTask, setAddingTask] = useState(false)
   const [newTask, setNewTask] = useState({ title: '', estimatedHours: 8, skill: '', confidence: 'medium' as 'high' | 'medium' | 'low' })
+  const [edits, setEdits] = useState<Record<string, unknown>>({})
+  const [saving, setSaving] = useState(false)
+  const [saveFlash, setSaveFlash] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [placements, setPlacements] = useState<any[]>([])
+
+  const hasEdits = Object.keys(edits).length > 0
 
   function handleAddTask() {
     const title = newTask.title.trim()
@@ -73,7 +80,10 @@ export default function EpicRecordPage() {
     const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''
     fetch('/api/planning')
       .then(r => r.json())
-      .then(data => setResult(findEpic(id, data.projects ?? [])))
+      .then(data => {
+        setResult(findEpic(id, data.projects ?? []))
+        setPlacements(data.roadmap?.workItemPlacements ?? [])
+      })
       .catch(() => setResult(findEpic(id, mockAllPlanningProjects)))
   }, [params.id])
 
@@ -91,14 +101,28 @@ export default function EpicRecordPage() {
   }
 
   const { epic, project } = result
-  const currentEpicStatus = localStatus ?? epic.status
-  const handleEpicStatusChange = async (v: string) => {
+  const currentEpicStatus = edits.status as string ?? localStatus ?? epic.status
+
+  const handleEpicStatusChange = (v: string) => {
     setLocalStatus(v)
-    await fetch('/api/planning/override', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId: epic.id, itemType: 'epic', overrides: { status: v } }),
-    })
+    setEdits((prev) => ({ ...prev, status: v }))
+  }
+
+  const handleSave = async () => {
+    if (!hasEdits) return
+    setSaving(true)
+    try {
+      await fetch('/api/planning/override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: epic.id, itemType: 'epic', overrides: edits }),
+      })
+      setSaveFlash('Saved')
+      setEdits({})
+      setTimeout(() => setSaveFlash(''), 2000)
+    } finally {
+      setSaving(false)
+    }
   }
   const totalHours = epic.workItems.reduce((s, w) => s + w.estimatedHours, 0)
 
@@ -128,7 +152,21 @@ export default function EpicRecordPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <h2 className="text-xl font-semibold text-gray-900">{epic.title}</h2>
-        <StatusSelect value={currentEpicStatus} onChange={handleEpicStatusChange} />
+        <div className="flex items-center gap-2 shrink-0">
+          {saveFlash && <span className="text-xs text-green-600">{saveFlash}</span>}
+          {hasEdits && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className={`rounded px-3 py-1 text-xs font-medium text-white transition-colors ${
+                saving ? 'bg-gray-400 cursor-wait' : 'bg-[#f28c28] hover:bg-[#d97a20]'
+              }`}
+            >
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          )}
+          <StatusSelect value={currentEpicStatus} onChange={handleEpicStatusChange} />
+        </div>
       </div>
 
       {/* Overview */}
@@ -251,8 +289,8 @@ export default function EpicRecordPage() {
                 <th className="px-4 py-2 text-left font-medium text-gray-600">Status</th>
                 <th className="px-4 py-2 text-left font-medium text-gray-600">Skill</th>
                 <th className="px-4 py-2 text-right font-medium text-gray-600">Hours</th>
-                <th className="px-4 py-2 text-left font-medium text-gray-600">Confidence</th>
-                <th className="px-4 py-2 text-left font-medium text-gray-600">Source</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">Start</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">End</th>
                 <th className="px-4 py-2 text-right font-medium text-gray-600">Sprint</th>
               </tr>
             </thead>
@@ -262,7 +300,7 @@ export default function EpicRecordPage() {
                 return (
                   <tr key={w.id} className="hover:bg-gray-50">
                     <td className="px-4 py-2">
-                      <Link href={`/tasks/${w.id}`} className="text-[#1a2e6b] hover:underline line-clamp-1">
+                      <Link href={`/tasks/${w.id}`} className="text-[#1a2e6b] hover:underline">
                         {w.title}
                       </Link>
                     </td>
@@ -273,44 +311,28 @@ export default function EpicRecordPage() {
                     </td>
                     <td className="px-4 py-2 text-gray-500">{w.primarySkill ?? w.skillRequired ?? '—'}</td>
                     <td className="px-4 py-2 text-right text-gray-500">{w.estimatedHours}h</td>
-                    <td className="px-4 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        w.confidence === 'high'   ? 'bg-green-100 text-green-700' :
-                        w.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                    'bg-red-100 text-red-700'
-                      }`}>
-                        {w.confidence}
-                      </span>
+                    <td className="px-4 py-2 text-gray-500 text-xs whitespace-nowrap">
+                      {(() => { const p = placements.find((pl: { workItemId: string }) => pl.workItemId === w.id); return p?.projectedStartDate ? new Date(p.projectedStartDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '—' })()}
                     </td>
-                    <td className="px-4 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SOURCE_BADGE_STYLES[kind]}`}>
-                        {SOURCE_BADGE_LABELS[kind]}
-                      </span>
+                    <td className="px-4 py-2 text-gray-500 text-xs whitespace-nowrap">
+                      {(() => { const p = placements.find((pl: { workItemId: string }) => pl.workItemId === w.id); return p?.projectedEndDate ? new Date(p.projectedEndDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '—' })()}
                     </td>
                     <td className="px-4 py-2 text-right text-gray-500">
-                      {w.sprintNumber != null ? `S${w.sprintNumber}` : '—'}
+                      {w.sprintNumber != null ? `S${w.sprintNumber}` : (() => { const p = placements.find((pl: { workItemId: string }) => pl.workItemId === w.id); return p ? `S${p.sprintNumber}` : '—' })()}
                     </td>
                   </tr>
                 )
               })}
               {localTasks.map((w) => (
                 <tr key={w.id} className="hover:bg-orange-50 bg-orange-50/40">
-                  <td className="px-4 py-2 text-[#1a2e6b] font-medium line-clamp-1">{w.title}</td>
+                  <td className="px-4 py-2 text-[#1a2e6b] font-medium">{w.title}</td>
                   <td className="px-4 py-2">
                     <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600">not-started</span>
                   </td>
                   <td className="px-4 py-2 text-gray-500">{w.primarySkill ?? '—'}</td>
                   <td className="px-4 py-2 text-right text-gray-500">{w.estimatedHours}h</td>
-                  <td className="px-4 py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      w.confidence === 'high'   ? 'bg-green-100 text-green-700' :
-                      w.confidence === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                  'bg-red-100 text-red-700'
-                    }`}>{w.confidence}</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">Manual</span>
-                  </td>
+                  <td className="px-4 py-2 text-gray-400 text-xs">—</td>
+                  <td className="px-4 py-2 text-gray-400 text-xs">—</td>
                   <td className="px-4 py-2 text-right text-gray-400">—</td>
                 </tr>
               ))}

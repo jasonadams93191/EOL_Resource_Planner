@@ -151,7 +151,7 @@ function WorkItemRow({
           {item.assumedEstimatedHours && !item.jira?.issueKey && (
             <span className="text-xs text-amber-500" title="Hours are assumed">~h</span>
           )}
-          <Link href={`/tasks/${item.id}`} className="text-gray-800 font-medium line-clamp-1 hover:text-indigo-600 hover:underline">{item.title}</Link>
+          <Link href={`/tasks/${item.id}`} className="text-gray-800 font-medium hover:text-indigo-600 hover:underline">{item.title}</Link>
           {hasManualOverrides && <span title="Has manual overrides" className="text-amber-500 text-xs">⚠</span>}
         </div>
       </td>
@@ -308,16 +308,20 @@ function EpicPanel({
   const [open, setOpen] = useState(true)
   const readiness = epicReadiness(epic)
 
-  // Sprint range for this epic
+  // Sprint range + predicted dates for this epic
   const epicItemIds = new Set(epic.workItems.map((wi) => wi.id))
-  const epicSprints = roadmap.workItemPlacements
-    .filter((p) => epicItemIds.has(p.workItemId))
-    .map((p) => p.sprintNumber)
+  const epicPlacements = roadmap.workItemPlacements.filter((p) => epicItemIds.has(p.workItemId))
+  const epicSprints = epicPlacements.map((p) => p.sprintNumber)
   const minSprint = epicSprints.length > 0 ? Math.min(...epicSprints) : null
   const maxSprint = epicSprints.length > 0 ? Math.max(...epicSprints) : null
   const sprintRange = minSprint !== null && maxSprint !== null
     ? minSprint === maxSprint ? `S${minSprint}` : `S${minSprint}–S${maxSprint}`
     : 'Not placed'
+  const epicStartDates = epicPlacements.map((p) => p.projectedStartDate).filter(Boolean) as string[]
+  const epicEndDates = epicPlacements.map((p) => p.projectedEndDate).filter(Boolean) as string[]
+  const epicStart = epicStartDates.length > 0 ? epicStartDates.sort()[0] : null
+  const epicEnd = epicEndDates.length > 0 ? epicEndDates.sort().reverse()[0] : null
+  const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 
   return (
     <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -333,7 +337,9 @@ function EpicPanel({
         <span className={`text-xs rounded px-1.5 py-0.5 ${ESTIMATE_READINESS_STYLES[readiness]}`}>
           {ESTIMATE_READINESS_LABELS[readiness]}
         </span>
-        <span className="text-xs text-gray-400 ml-auto mr-2">{sprintRange}</span>
+        <span className="text-xs text-gray-400 ml-auto mr-2">
+          {epicStart && epicEnd ? `${fmtDate(epicStart)} – ${fmtDate(epicEnd)}` : ''}{epicStart ? ' · ' : ''}{sprintRange}
+        </span>
         <span className="text-gray-400">{open ? '▲' : '▼'}</span>
       </button>
 
@@ -411,6 +417,8 @@ export default function InitiativePage() {
   const [localEpics, setLocalEpics] = useState<PlanningEpic[]>([])
   const [addingEpic, setAddingEpic] = useState(false)
   const [newEpicTitle, setNewEpicTitle] = useState('')
+  // Save flash for field edits
+  const [saveFlash, setSaveFlash] = useState('')
   // Jira sync state
   const [syncing, setSyncing] = useState(false)
   const [syncFlash, setSyncFlash] = useState('')
@@ -501,10 +509,13 @@ export default function InitiativePage() {
       [itemId]: { ...(prev[itemId] ?? {}), ...updates },
     }))
     // Persist to server
-    void fetch('/api/planning/override', {
+    fetch('/api/planning/override', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId, itemType: 'work-item', overrides: updates }),
+    }).then(() => {
+      setSaveFlash('Saved')
+      setTimeout(() => setSaveFlash(''), 2000)
     })
   }
 
@@ -565,6 +576,7 @@ export default function InitiativePage() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {saveFlash && <span className="text-xs text-green-600">{saveFlash}</span>}
           {syncFlash && <span className="text-xs text-green-600">{syncFlash}</span>}
           {syncError && <span className="text-xs text-red-500">{syncError}</span>}
           <button
@@ -597,7 +609,7 @@ export default function InitiativePage() {
             onChange={(e) => {
               const v = e.target.value as PlanningPriority
               setPriority(v)
-              void fetch('/api/planning/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: project.id, itemType: 'project', overrides: { priority: v } }) })
+              fetch('/api/planning/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: project.id, itemType: 'project', overrides: { priority: v } }) }).then(() => { setSaveFlash('Saved'); setTimeout(() => setSaveFlash(''), 2000) })
             }}
             className={`text-xs font-medium rounded px-2 py-0.5 border-0 cursor-pointer capitalize ${PRIORITY_STYLES[priority]}`}
           >
@@ -630,7 +642,7 @@ export default function InitiativePage() {
             onChange={(e) => {
               const v = e.target.value as ProjectStage
               setStage(v)
-              void fetch('/api/planning/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: project.id, itemType: 'project', overrides: { stage: v } }) })
+              fetch('/api/planning/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: project.id, itemType: 'project', overrides: { stage: v } }) }).then(() => { setSaveFlash('Saved'); setTimeout(() => setSaveFlash(''), 2000) })
             }}
             className={`text-xs rounded px-2 py-0.5 border-0 cursor-pointer ${STAGE_STYLES[stage]}`}
           >
@@ -692,7 +704,7 @@ export default function InitiativePage() {
               onChange={(e) => {
                 const v = e.target.value || undefined
                 setOwner(v)
-                void fetch('/api/planning/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: project.id, itemType: 'project', overrides: { owner: v ?? null } }) })
+                fetch('/api/planning/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: project.id, itemType: 'project', overrides: { owner: v ?? null } }) }).then(() => { setSaveFlash('Saved'); setTimeout(() => setSaveFlash(''), 2000) })
               }}
               className="text-xs border border-gray-200 rounded px-1.5 py-0.5"
             >
