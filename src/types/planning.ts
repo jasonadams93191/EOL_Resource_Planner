@@ -329,6 +329,12 @@ export interface PlanningWorkItem {
   splitRecommended?: boolean
   manualOverrides?: ManualOverride[]
   jira?: JiraIssueData
+  // Enhancement layer flags — set when values were assumed/generated rather than provided
+  assumedEstimatedHours?: boolean
+  assumedSkill?: boolean
+  assumedPriority?: boolean
+  // AI enrichment flag — true when this work item was suggested by the LLM
+  aiSuggested?: boolean
 }
 
 // ── Planning Epic ─────────────────────────────────────────────

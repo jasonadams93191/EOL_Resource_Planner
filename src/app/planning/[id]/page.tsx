@@ -115,10 +115,24 @@ function WorkItemRow({
         <div className="flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[item.status] ?? 'bg-gray-300'}`} />
           {item.jira?.issueKey ? (
-            <span className="text-xs rounded bg-blue-100 text-blue-700 px-1 py-0.5 font-mono shrink-0">{item.jira!.issueKey}</span>
-          ) : item.sourceRefs.every((r) => r.sourceType === 'manual') ? (
-            <span className="text-xs rounded bg-gray-100 text-gray-400 px-1 py-0.5 font-mono shrink-0" title="Manual item — no Jira key">[manual]</span>
-          ) : null}
+            item.jira.url ? (
+              <a href={item.jira.url} target="_blank" rel="noopener noreferrer"
+                className="text-xs rounded bg-blue-100 text-blue-700 px-1 py-0.5 font-mono shrink-0 hover:underline">
+                {item.jira.issueKey}
+              </a>
+            ) : (
+              <span className="text-xs rounded bg-blue-100 text-blue-700 px-1 py-0.5 font-mono shrink-0">{item.jira.issueKey}</span>
+            )
+          ) : item.aiSuggested ? (
+            <span className="text-xs rounded bg-purple-100 text-purple-700 px-1 py-0.5 shrink-0" title="AI-suggested task">AI</span>
+          ) : item.assumedEstimatedHours ? (
+            <span className="text-xs rounded bg-teal-100 text-teal-700 px-1 py-0.5 shrink-0" title="Template-generated task">TPL</span>
+          ) : (
+            <span className="text-xs rounded bg-gray-100 text-gray-400 px-1 py-0.5 font-mono shrink-0" title="Manual item">[manual]</span>
+          )}
+          {item.assumedEstimatedHours && !item.jira?.issueKey && (
+            <span className="text-xs text-amber-500" title="Hours are assumed">~h</span>
+          )}
           <span className="text-gray-800 font-medium line-clamp-1">{item.title}</span>
           {hasManualOverrides && <span title="Has manual overrides" className="text-amber-500 text-xs">⚠</span>}
         </div>
@@ -322,6 +336,8 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
   // Sprint placement
   const projectPlacements = roadmap.workItemPlacements.filter((p) => allWorkItemIds.has(p.workItemId))
   const projectSprintNumbers = Array.from(new Set(projectPlacements.map((p) => p.sprintNumber))).sort((a, b) => a - b)
+  const lastSprintNumber = projectSprintNumbers.length > 0 ? projectSprintNumbers[projectSprintNumbers.length - 1] : null
+  const completionSprint = lastSprintNumber ? roadmap.sprints.find((s) => s.number === lastSprintNumber) : null
 
   // Compute readiness for the project
   const allEpicReadiness = project.epics.map(epicReadiness)
@@ -490,6 +506,12 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
             </span>
           </>
         )}
+        {completionSprint && (
+          <>
+            <span className="text-gray-300">·</span>
+            <span>Est. complete: <strong className="text-gray-700">S{completionSprint.number} ({completionSprint.endDate.slice(5).replace('-', '/')})</strong></span>
+          </>
+        )}
         {ownerMember && (
           <>
             <span className="text-gray-300">·</span>
@@ -577,6 +599,50 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
           </div>
         )}
       </div>
+
+      {/* Jira Field Details — all work items (full task info) */}
+      <details className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <summary className="px-5 py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-50">
+          Jira Field Details (full task info)
+        </summary>
+        <div className="px-5 pb-5 space-y-4 text-xs text-gray-600">
+          {allWorkItems.map((wi) => (
+            <div key={wi.id} className="border border-gray-100 rounded p-3 space-y-1">
+              <div className="flex items-center gap-2 font-medium text-gray-800">
+                {wi.jira?.issueKey ? (
+                  <span className="font-mono text-blue-700">{wi.jira.issueKey}</span>
+                ) : wi.aiSuggested ? (
+                  <span className="text-purple-600">[AI-suggested]</span>
+                ) : wi.assumedEstimatedHours ? (
+                  <span className="text-teal-600">[Template-generated]</span>
+                ) : (
+                  <span className="text-gray-400">[manual]</span>
+                )}
+                <span>{wi.title}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-gray-500">
+                <span>Status: <strong className="text-gray-700">{wi.jira?.status ?? wi.status}</strong></span>
+                <span>Priority: <strong className="text-gray-700">{wi.jira?.priority ?? wi.priority ?? '—'}</strong></span>
+                <span>Assignee: <strong className="text-gray-700">{wi.jira?.assignee?.displayName ?? '—'}</strong></span>
+                <span>Reporter: <strong className="text-gray-700">{wi.jira?.reporter?.displayName ?? '—'}</strong></span>
+                <span>Est. hours: <strong className="text-gray-700">{wi.estimatedHours}h{wi.assumedEstimatedHours ? ' (assumed)' : ''}</strong></span>
+                <span>Confidence: <strong className="text-gray-700">{wi.confidence}</strong></span>
+                {wi.jira?.labels && wi.jira.labels.length > 0 && (
+                  <span className="col-span-2">Labels: {wi.jira.labels.map((l) => (
+                    <span key={l} className="inline-block bg-gray-100 rounded px-1 mr-1">{l}</span>
+                  ))}</span>
+                )}
+                {wi.jira?.updatedAt && (
+                  <span className="col-span-2">Updated: {new Date(wi.jira.updatedAt).toLocaleDateString()}</span>
+                )}
+                {wi.jira?.description && (
+                  <span className="col-span-2 text-gray-500 italic">{wi.jira.description.slice(0, 300)}{wi.jira.description.length > 300 ? '…' : ''}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </details>
 
       {/* Source refs */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">

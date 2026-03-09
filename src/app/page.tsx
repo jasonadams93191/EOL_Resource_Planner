@@ -81,18 +81,6 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      <div className="rounded-lg bg-blue-50 border border-blue-200 p-5">
-        <h3 className="font-medium text-blue-900 mb-2">About This Tool</h3>
-        <p className="text-sm text-blue-800">
-          This internal planner combines work from <strong>EOL Tech Team</strong> and{' '}
-          <strong>AA/TKO Projects</strong> into a single shared capacity model for a 4-person team.
-          Use it to estimate effort, view delivery timelines, and model staffing scenarios.
-        </p>
-        <p className="text-xs text-blue-600 mt-3">
-          Phase 1 — All data is mock. Wave 2 will connect live Jira workspaces.
-        </p>
-      </div>
-
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           { href: '/planning', label: 'View Planning', desc: 'Sprint plan + work items' },

@@ -2,6 +2,7 @@
 
 import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
 import { priorityWeight } from '@/lib/planning/sprint-engine'
+import { slashDate } from '@/lib/planning/sprint-dates'
 import type { PlanningProject, TeamMember } from '@/types/planning'
 
 interface InitiativeTimelineViewProps {
@@ -85,7 +86,7 @@ function GanttBar({
 // ── Main component ────────────────────────────────────────────
 
 export function InitiativeTimelineView({ roadmap, projects }: InitiativeTimelineViewProps) {
-  const { workItemPlacements, overflowItems, totalSprints } = roadmap
+  const { workItemPlacements, overflowItems, totalSprints, sprints } = roadmap
   const overflowSet = new Set(overflowItems)
 
   // Sort projects by priority
@@ -122,14 +123,26 @@ export function InitiativeTimelineView({ roadmap, projects }: InitiativeTimeline
           </div>
           {/* Sprint columns */}
           <div className="flex-1 flex">
-            {sprintCols.map((n) => (
-              <div
-                key={n}
-                className="flex-1 text-center text-xs font-semibold text-gray-500 py-2 border-r border-gray-100"
-              >
-                S{n}
-              </div>
-            ))}
+            {sprintCols.map((n) => {
+              const sprint = sprints.find((s) => s.number === n)
+              return (
+                <div
+                  key={n}
+                  className="flex-1 text-center text-xs font-semibold text-gray-500 py-2 border-r border-gray-100"
+                >
+                  <div>S{n}</div>
+                  {sprint && (
+                    <div className="font-normal text-gray-400 text-[10px]">
+                      {slashDate(sprint.startDate)}–{slashDate(sprint.endDate)}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          {/* Completion column header */}
+          <div className="w-36 flex-shrink-0 px-3 py-2 text-right text-xs font-semibold text-gray-500">
+            Est. complete
           </div>
         </div>
 
@@ -140,6 +153,12 @@ export function InitiativeTimelineView({ roadmap, projects }: InitiativeTimeline
           const projectHasOverflow = allProjectItemIds.some((id) => overflowSet.has(id))
           const barColor = PROJECT_BAR_COLORS[projectIndex % PROJECT_BAR_COLORS.length]
           const textColor = PROJECT_TEXT_COLORS[projectIndex % PROJECT_TEXT_COLORS.length]
+
+          // Compute projected completion date from last sprint's endDate
+          const completionSprint = projectRange ? sprints.find((s) => s.number === projectRange.max) : null
+          const completionLabel = completionSprint
+            ? `S${completionSprint.number} (${slashDate(completionSprint.endDate)})`
+            : null
 
           return (
             <div key={project.id} className="border-b border-gray-200">
@@ -160,6 +179,14 @@ export function InitiativeTimelineView({ roadmap, projects }: InitiativeTimeline
                     />
                   ) : (
                     <div className="h-5 text-xs text-gray-300 text-center leading-5">Not placed</div>
+                  )}
+                </div>
+                {/* Projected completion */}
+                <div className="w-36 flex-shrink-0 px-3 py-2 text-right text-xs text-gray-400 whitespace-nowrap">
+                  {completionLabel ? (
+                    <span title="Projected completion sprint">{completionLabel}</span>
+                  ) : (
+                    <span className="text-gray-200">—</span>
                   )}
                 </div>
               </div>
