@@ -2,11 +2,11 @@
 // Jira Snapshot Store
 //
 // Dual-layer persistence:
-//   - Vercel KV (Redis) when KV_REST_API_URL + KV_REST_API_TOKEN are set
+//   - Neon (serverless Postgres) when DATABASE_URL is set
 //   - globalThis in-memory fallback for local dev
 //
-// KV keys: "jira:snapshot:ws-eol" and "jira:snapshot:ws-ati"
-// TTL: 24 hours (snapshots expire to force re-sync)
+// Table: jira_snapshots(workspace_id TEXT PRIMARY KEY, data JSONB, updated_at TIMESTAMPTZ)
+// Created automatically on first write.
 //
 // Scope: EOL and ATI workspaces only. READ-ONLY data.
 // No Jira writes permitted anywhere in this module.
@@ -25,17 +25,26 @@ export interface JiraSnapshot {
   }
 }
 
-// ── KV detection ──────────────────────────────────────────────
+// ── Neon detection ────────────────────────────────────────────
 
-function isKvConfigured(): boolean {
-  return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+function isNeonConfigured(): boolean {
+  return Boolean(process.env.DATABASE_URL)
 }
 
-function kvKey(ws: WorkspaceId): string {
-  return `jira:snapshot:${ws}`
+async function getNeonSql() {
+  const { neon } = await import('@neondatabase/serverless')
+  return neon(process.env.DATABASE_URL!)
 }
 
-const KV_TTL_SECONDS = 60 * 60 * 24 // 24 hours
+async function ensureTable(sql: Awaited<ReturnType<typeof getNeonSql>>) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS jira_snapshots (
+      workspace_id TEXT PRIMARY KEY,
+      data         JSONB NOT NULL,
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+}
 
 // ── In-memory fallback ────────────────────────────────────────
 
@@ -51,21 +60,32 @@ function getMemStore(): Record<WorkspaceId, JiraSnapshot> {
   return globalThis.__jiraSnapshots
 }
 
-// ── Public API (async for KV compatibility) ───────────────────
+// ── Public API (async) ────────────────────────────────────────
 
 export async function saveSnapshotAsync(ws: WorkspaceId, snapshot: JiraSnapshot): Promise<void> {
-  if (isKvConfigured()) {
-    const { kv } = await import('@vercel/kv')
-    await kv.set(kvKey(ws), snapshot, { ex: KV_TTL_SECONDS })
+  if (isNeonConfigured()) {
+    const sql = await getNeonSql()
+    await ensureTable(sql)
+    await sql`
+      INSERT INTO jira_snapshots (workspace_id, data, updated_at)
+      VALUES (${ws}, ${JSON.stringify(snapshot)}, NOW())
+      ON CONFLICT (workspace_id) DO UPDATE
+        SET data = EXCLUDED.data,
+            updated_at = EXCLUDED.updated_at
+    `
   } else {
     getMemStore()[ws] = snapshot
   }
 }
 
 export async function getSnapshotAsync(ws: WorkspaceId): Promise<JiraSnapshot | null> {
-  if (isKvConfigured()) {
-    const { kv } = await import('@vercel/kv')
-    return (await kv.get<JiraSnapshot>(kvKey(ws))) ?? null
+  if (isNeonConfigured()) {
+    const sql = await getNeonSql()
+    await ensureTable(sql)
+    const rows = await sql`
+      SELECT data FROM jira_snapshots WHERE workspace_id = ${ws}
+    `
+    return rows.length > 0 ? (rows[0].data as JiraSnapshot) : null
   }
   return getMemStore()[ws] ?? null
 }
@@ -77,12 +97,10 @@ export async function getAllSnapshotsAsync(): Promise<Record<WorkspaceId, JiraSn
   }
 }
 
-// ── Sync wrappers (kept for the sync route) ───────────────────
+// ── Sync wrappers (in-memory only) ───────────────────────────
 
-/** Sync save — used by sync route (must await at call site) */
 export function saveSnapshot(ws: WorkspaceId, snapshot: JiraSnapshot): void {
-  // Fire-and-forget when KV is configured; immediate when in-memory
-  if (isKvConfigured()) {
+  if (isNeonConfigured()) {
     void saveSnapshotAsync(ws, snapshot)
   } else {
     getMemStore()[ws] = snapshot
@@ -90,17 +108,12 @@ export function saveSnapshot(ws: WorkspaceId, snapshot: JiraSnapshot): void {
 }
 
 export function getSnapshot(ws: WorkspaceId): JiraSnapshot | null {
-  // Sync read only works for in-memory — callers on Vercel should use getSnapshotAsync
-  if (isKvConfigured()) {
-    return null // force callers to use async path
-  }
+  if (isNeonConfigured()) return null // force async path on Vercel
   return getMemStore()[ws] ?? null
 }
 
 export function getAllSnapshots(): Record<WorkspaceId, JiraSnapshot | null> {
-  if (isKvConfigured()) {
-    return { 'ws-eol': null, 'ws-ati': null } // force async path
-  }
+  if (isNeonConfigured()) return { 'ws-eol': null, 'ws-ati': null }
   const store = getMemStore()
   return {
     'ws-eol': store['ws-eol'] ?? null,
