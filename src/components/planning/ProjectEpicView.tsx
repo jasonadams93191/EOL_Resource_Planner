@@ -57,11 +57,6 @@ function SkillChip({ skillId, skills }: { skillId: string; skills: Skill[] }) {
   )
 }
 
-function formatEffort(effortInSprints: number): string {
-  if (effortInSprints === 1) return '1 sprint'
-  if (effortInSprints < 1) return `${effortInSprints} sprint`
-  return `${effortInSprints} sprints`
-}
 
 function WorkItemRow({
   item,
@@ -157,10 +152,7 @@ function WorkItemRow({
 
       {/* Right column: effort */}
       <div className="text-right text-xs text-gray-500 whitespace-nowrap shrink-0 mt-0.5">
-        <div>{item.effortHours}h</div>
-        {item.effortInSprints != null && (
-          <div className="text-indigo-600">{formatEffort(item.effortInSprints)}</div>
-        )}
+        <div>{item.estimatedHours}h</div>
       </div>
     </div>
   )
@@ -180,7 +172,7 @@ function EpicPanel({
   estimates?: Record<string, WorkItemEstimate>
 }) {
   const [expanded, setExpanded] = useState(true)
-  const totalHours = epic.workItems.reduce((s, wi) => s + wi.effortHours, 0)
+  const totalHours = epic.workItems.reduce((s, wi) => s + wi.estimatedHours, 0)
   const doneCount = epic.workItems.filter((wi) => wi.status === 'done').length
   const readiness = epicReadiness(epic)
 

@@ -100,7 +100,7 @@ export const EFFORT_BAND_LABELS: Record<EffortBand, string> = {
 }
 
 // ── Effort Size ────────────────────────────────────────────────
-// T-shirt sizing mapped to sprint fractions.
+// T-shirt sizing mapped to sprint fractions (kept for legacy display).
 export type EffortSize = 'XS' | 'S' | 'M' | 'L' | 'XL'
 export const EFFORT_SIZE_SPRINTS: Record<EffortSize, number> = {
   XS: 0.25,
@@ -109,6 +109,16 @@ export const EFFORT_SIZE_SPRINTS: Record<EffortSize, number> = {
   L: 2.0,
   XL: 3.0,
 }
+
+// Hours ranges per T-shirt size. Tasks > SPLIT_THRESHOLD_HOURS should be split.
+export const EFFORT_SIZE_HOUR_RANGES: Record<EffortSize, { min: number; max: number }> = {
+  XS: { min: 2,  max: 6   },
+  S:  { min: 6,  max: 16  },
+  M:  { min: 16, max: 32  },
+  L:  { min: 32, max: 60  },
+  XL: { min: 60, max: 120 },
+}
+export const SPLIT_THRESHOLD_HOURS = 60
 
 // ── Skill Level ────────────────────────────────────────────────
 // 0 = None, 1 = Awareness, 2 = Working, 3 = Strong, 4 = Expert
@@ -142,18 +152,39 @@ export interface Role {
   description?: string
 }
 
+// ── Resource Kind ──────────────────────────────────────────────
+// Classifies whether a team member is permanent, temporary, or external.
+export type ResourceKind = 'core' | 'temp' | 'external'
+
 // ── Team Member ────────────────────────────────────────────────
 // Replaces the old Resource type for planning purposes.
-// sprintCapacity is a fraction of a sprint (1.0 = full, 0.5 = half).
+// availableHoursPerSprint = gross capacity (hard ceiling, default 40h).
+// utilizationTargetPercent = soft utilization ceiling (0–100).
+// targetPlannedHours (derived helper) = availableHoursPerSprint × utilizationTargetPercent / 100.
 export interface TeamMember {
   id: string
   name: string
   primaryRoleId: string
   userSkills: UserSkill[]
-  sprintCapacity: number
+  availableHoursPerSprint: number    // gross capacity per 2-week sprint (default 40)
+  utilizationTargetPercent: number   // soft utilization ceiling 0–100
   isActive: boolean
+  resourceKind?: ResourceKind        // 'core' = permanent (default), 'temp', 'external'
+  startSprintId?: number             // first sprint available (temp/external only)
+  endSprintId?: number               // last sprint available (temp/external only)
   inactiveReason?: string
   inactiveDate?: string
+}
+
+// ── Temp Resource Template ─────────────────────────────────────
+// Defines a candidate profile for adding a temporary or external resource.
+export interface TempResourceTemplate {
+  id: string
+  label: string
+  primaryRoleId: string
+  skills: UserSkill[]
+  availableHoursPerSprint: number
+  utilizationTargetPercent: number
 }
 
 // ── Capacity Allocation ────────────────────────────────────────
@@ -232,7 +263,7 @@ export type PlanningPriority = 'high' | 'medium' | 'low'
 // ── Manual Override ────────────────────────────────────────────
 // Tracks when a field has been manually overridden from its engine-computed value.
 export interface ManualOverride {
-  field: 'effortHours' | 'effortInSprints' | 'assigneeId' | 'primarySkill' | 'requiredSkillLevel' | 'sprintNumber'
+  field: 'estimatedHours' | 'assigneeId' | 'primarySkill' | 'requiredSkillLevel' | 'sprintNumber'
   originalValue: string | number
   overriddenValue: string | number
   note?: string
@@ -250,13 +281,14 @@ export interface PlanningWorkItem {
   planningEpicId: string
   status: PlanningStatus
   priority?: PlanningPriority         // optional — inherits from project if absent
-  estimatedHours?: number
   assigneeId?: string
   // All Jira issues (or manual entries) that this item is derived from
   sourceRefs: PlanningSourceRef[]
   notes?: string
   // Phase 1 planning engine fields
-  effortHours: number // estimated effort in hours
+  estimatedHours: number              // primary effort field (hours)
+  minEstimatedHours?: number          // optional lower bound for estimate range
+  maxEstimatedHours?: number          // optional upper bound for estimate range
   confidence: 'low' | 'medium' | 'high' // estimation confidence
   primaryRole: ResourceType // which resource type should do this work
   skillRequired?: string // optional human-readable skill label
@@ -268,7 +300,6 @@ export interface PlanningWorkItem {
   requiredSkillLevel?: SkillLevel
   domainTag?: string          // domain grouping label (e.g. 'litify', 'sales-cloud')
   urgency?: 'critical' | 'high' | 'normal' | 'low'
-  effortInSprints?: number    // effort expressed as sprint fractions
   candidateAssigneeIds?: string[]
   dependsOnWorkItemIds?: string[]
   splitRecommended?: boolean
@@ -329,4 +360,11 @@ export function getEffectivePriority(
   project: { priority: PlanningPriority }
 ): PlanningPriority {
   return item.priority ?? project.priority
+}
+
+// ── Target Planned Hours Helper ────────────────────────────────
+// Derived soft capacity ceiling: availableHoursPerSprint × utilizationTargetPercent / 100.
+// The roadmap engine prefers staying under this value; exceeding availableHoursPerSprint = overload.
+export function targetPlannedHours(member: TeamMember): number {
+  return Math.round(member.availableHoursPerSprint * member.utilizationTargetPercent / 100)
 }

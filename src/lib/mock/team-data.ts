@@ -6,7 +6,9 @@
 //
 // Rules:
 //   - All ids are stable strings (never auto-generated)
-//   - sprintCapacity is a fraction: 1.0 = full sprint, 0.5 = half
+//   - availableHoursPerSprint = gross hours per 2-week sprint (default 40)
+//   - utilizationTargetPercent = soft ceiling (roadmap prefers staying under this)
+//   - targetPlannedHours (derived) = availableHoursPerSprint × utilizationTargetPercent / 100
 //   - Skill levels: 0=None 1=Awareness 2=Working 3=Strong 4=Expert
 //   - isActive=true for all members at seed time
 //
@@ -37,15 +39,16 @@ export const SKILLS: Skill[] = [
 // ── Roles ─────────────────────────────────────────────────────
 
 export const ROLES: Role[] = [
-  { id: 'role-solution-lead',   name: 'Solution Lead / PM' },
-  { id: 'role-sf-dev',          name: 'Salesforce Dev / Integration' },
-  { id: 'role-sf-builder',      name: 'Salesforce Builder / Admin' },
-  { id: 'role-ai-automation',   name: 'AI / Automation / Enablement' },
-  { id: 'role-automation-dev',  name: 'Automation / Dev Support' },
-  { id: 'role-qa-docs',         name: 'QA / Documentation / Enablement' },
-  { id: 'role-sf-process',      name: 'Salesforce Builder / Process Automation' },
-  { id: 'role-revops',          name: 'RevOps / Sales Cloud / Marketing Ops' },
-  { id: 'role-web-marketing',   name: 'Web / Marketing Tech' },
+  { id: 'role-solution-lead',        name: 'Solution Lead / PM' },
+  { id: 'role-sf-dev',               name: 'Salesforce Dev / Integration' },
+  { id: 'role-sf-builder',           name: 'Salesforce Builder / Admin' },
+  { id: 'role-ai-automation',        name: 'AI / Automation / Enablement' },
+  { id: 'role-automation-dev',       name: 'Automation / Dev Support' },
+  { id: 'role-qa-docs',              name: 'QA / Documentation / Enablement' },
+  { id: 'role-sf-process',           name: 'Salesforce Builder / Process Automation' },
+  { id: 'role-revops',               name: 'RevOps / Sales Cloud / Marketing Ops' },
+  { id: 'role-web-marketing',        name: 'Web / Marketing Tech' },
+  { id: 'role-director-technology',  name: 'Director of Technology' },
 ]
 
 // ── Team Members ──────────────────────────────────────────────
@@ -55,8 +58,10 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-jusiah',
     name: 'Jusiah Sioson',
     primaryRoleId: 'role-solution-lead',
-    sprintCapacity: 0.5,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 55,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-litify',      level: 3 },
       { skillId: 'skill-sf-config',   level: 3 },
@@ -67,11 +72,26 @@ export const TEAM_MEMBERS: TeamMember[] = [
     ],
   },
   {
+    id: 'tm-jason',
+    name: 'Jason',
+    primaryRoleId: 'role-director-technology',
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 55,
+    isActive: true,
+    resourceKind: 'core',
+    userSkills: [
+      { skillId: 'skill-pm',        level: 3 },
+      { skillId: 'skill-reporting', level: 2 },
+    ],
+  },
+  {
     id: 'tm-daniel',
     name: 'Daniel Dion',
     primaryRoleId: 'role-sf-dev',
-    sprintCapacity: 1.0,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 85,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-sf-dev',      level: 3 },
       { skillId: 'skill-sf-config',   level: 3 },
@@ -82,8 +102,10 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-lemuel',
     name: 'Lemuel Maturan',
     primaryRoleId: 'role-sf-builder',
-    sprintCapacity: 1.0,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 85,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-sf-config',  level: 3 },
       { skillId: 'skill-litify',     level: 3 },
@@ -94,8 +116,10 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-kumar',
     name: 'Kumar Abhineet',
     primaryRoleId: 'role-sf-dev',
-    sprintCapacity: 0.9,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 85,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-integration', level: 3 },
       { skillId: 'skill-sf-dev',      level: 3 },
@@ -106,8 +130,10 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-leslie',
     name: 'Leslie Wong',
     primaryRoleId: 'role-ai-automation',
-    sprintCapacity: 0.6,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 75,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-docs', level: 3 },
       { skillId: 'skill-qa',   level: 3 },
@@ -118,8 +144,10 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-ayush',
     name: 'Ayush Gupta',
     primaryRoleId: 'role-automation-dev',
-    sprintCapacity: 0.6,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 75,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-sf-config', level: 3 },
       { skillId: 'skill-qa',        level: 3 },
@@ -130,8 +158,10 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-ryan',
     name: 'Ryan Magno',
     primaryRoleId: 'role-qa-docs',
-    sprintCapacity: 0.5,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 70,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-qa',   level: 3 },
       { skillId: 'skill-docs', level: 3 },
@@ -141,8 +171,10 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-jeeleigh',
     name: 'Jeeleigh Amor Divinagracia',
     primaryRoleId: 'role-sf-process',
-    sprintCapacity: 0.5,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 75,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-sf-config',   level: 3 },
       { skillId: 'skill-sf-data',     level: 3 },
@@ -153,8 +185,10 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-stefan',
     name: 'Stefan Filipovic',
     primaryRoleId: 'role-revops',
-    sprintCapacity: 0.5,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 70,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-sales-cloud', level: 3 },
       { skillId: 'skill-reporting',   level: 3 },
@@ -165,8 +199,10 @@ export const TEAM_MEMBERS: TeamMember[] = [
     id: 'tm-lord',
     name: 'Lord Rynkar Tracy Dwight U. Arcamo',
     primaryRoleId: 'role-web-marketing',
-    sprintCapacity: 0.5,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 75,
     isActive: true,
+    resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-web', level: 3 },
     ],

@@ -6,6 +6,7 @@ import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { TEAM_MEMBERS, SKILLS } from '@/lib/mock/team-data'
 import { buildSprintRoadmap } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
+import { recommendAcceleration } from '@/lib/planning/acceleration-engine'
 import { getInitiativeWarnings, epicReadiness, workItemReadiness } from '@/lib/planning/readiness-engine'
 import { rankCandidates } from '@/lib/planning/assignment-engine'
 import {
@@ -78,7 +79,7 @@ const ALL_PLANNING_TYPES = Object.entries(PLANNING_TYPE_LABELS) as [PlanningType
 // ── Work Item Row ─────────────────────────────────────────────
 
 interface LocalOverride {
-  effortInSprints?: number
+  estimatedHours?: number
   assigneeId?: string
 }
 
@@ -94,7 +95,7 @@ function WorkItemRow({
   const placement = roadmap.workItemPlacements.find((p) => p.workItemId === item.id)
   const assignedMemberId = localOverride.assigneeId ?? placement?.assignedTeamMemberId ?? item.assigneeId
   const assignedMember = assignedMemberId ? TEAM_MEMBERS.find((m) => m.id === assignedMemberId) : undefined
-  const effortOverridden = localOverride.effortInSprints !== undefined
+  const effortOverridden = localOverride.estimatedHours !== undefined
   const assigneeOverridden = localOverride.assigneeId !== undefined
 
   const candidates = rankCandidates(
@@ -122,19 +123,19 @@ function WorkItemRow({
         <div className="flex items-center gap-1">
           <input
             type="number"
-            step="0.25"
-            min="0.25"
-            max="8"
-            value={localOverride.effortInSprints ?? item.effortInSprints ?? ''}
+            step="2"
+            min="1"
+            max="240"
+            value={localOverride.estimatedHours ?? item.estimatedHours ?? ''}
             onChange={(e) => {
               const val = parseFloat(e.target.value)
               if (!isNaN(val) && val > 0) {
-                onOverrideChange({ effortInSprints: val })
+                onOverrideChange({ estimatedHours: val })
               }
             }}
             className={`w-16 border rounded px-1 py-0.5 text-xs ${effortOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
           />
-          <span className="text-gray-400 text-xs">sp</span>
+          <span className="text-gray-400 text-xs">h</span>
         </div>
       </td>
       {/* Primary skill */}
@@ -325,6 +326,9 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
         ? 'ready'
         : 'partial'
 
+  // Acceleration recommendation
+  const acceleration = recommendAcceleration(project, mockAllPlanningProjects, TEAM_MEMBERS, START_DATE)
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Back link + breadcrumb */}
@@ -512,6 +516,64 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
         </div>
       </div>
 
+      {/* Speed Up Initiative */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <h2 className="text-sm font-semibold text-gray-700 mb-1">Speed Up Initiative</h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Simulates adding a temp resource to estimate sprint savings.
+        </p>
+        {acceleration.currentSprintCount === 0 ? (
+          <p className="text-sm text-gray-400">No work items placed in the roadmap yet.</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-gray-500">Current: <strong className="text-gray-800">{acceleration.currentSprintCount} sprint{acceleration.currentSprintCount !== 1 ? 's' : ''}</strong></span>
+              {acceleration.bestCandidate && acceleration.bestCandidate.sprintReduction > 0 && (
+                <>
+                  <span className="text-gray-300">→</span>
+                  <span className="text-green-700">Best case: <strong>{acceleration.projectedSprintCount} sprint{acceleration.projectedSprintCount !== 1 ? 's' : ''}</strong> (−{acceleration.bestCandidate.sprintReduction})</span>
+                </>
+              )}
+            </div>
+            {acceleration.noImpactReason ? (
+              <p className="text-xs text-gray-400">{acceleration.noImpactReason}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-gray-500">
+                      <th className="px-3 py-2 font-semibold border-b border-gray-200">Resource</th>
+                      <th className="px-3 py-2 font-semibold border-b border-gray-200 text-center">Score</th>
+                      <th className="px-3 py-2 font-semibold border-b border-gray-200 text-center">Sprints Saved</th>
+                      <th className="px-3 py-2 font-semibold border-b border-gray-200">Reasoning</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {acceleration.topCandidates.map((c, i) => (
+                      <tr key={c.template.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">
+                          {i === 0 && <span className="mr-1 text-amber-500">★</span>}
+                          {c.template.label}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`rounded px-1.5 py-0.5 font-medium ${c.totalScore >= 30 ? 'bg-green-100 text-green-700' : c.totalScore >= 10 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {c.totalScore}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-gray-700">
+                          {c.sprintReduction > 0 ? `−${c.sprintReduction}` : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500">{c.explanation.join(' · ')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Manual overrides summary */}
       {Object.keys(localOverrides).length > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -520,8 +582,8 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
             {Object.entries(localOverrides).map(([itemId, override]) => {
               const item = allWorkItems.find((wi) => wi.id === itemId)
               const overrideList: ManualOverride[] = []
-              if (override.effortInSprints !== undefined) {
-                overrideList.push({ field: 'effortInSprints', originalValue: item?.effortInSprints ?? 0, overriddenValue: override.effortInSprints })
+              if (override.estimatedHours !== undefined) {
+                overrideList.push({ field: 'estimatedHours', originalValue: item?.estimatedHours ?? 0, overriddenValue: override.estimatedHours })
               }
               if (override.assigneeId !== undefined) {
                 const member = TEAM_MEMBERS.find((m) => m.id === override.assigneeId)

@@ -47,19 +47,19 @@ export function selectPrimaryRole(hint: WorkItemHint): ResourceType {
 }
 
 export function selectEffortAndConfidence(hint: WorkItemHint): {
-  effortHours: number
+  estimatedHours: number
   confidence: 'low' | 'medium' | 'high'
 } {
   // Request types: 2h, low confidence — human review needed
   if (hint.issueType === 'request') {
-    return { effortHours: 2, confidence: 'low' }
+    return { estimatedHours: 2, confidence: 'low' }
   }
   // If story points provided: points × 4h, medium confidence
   if (hint.storyPoints != null && hint.storyPoints > 0) {
-    return { effortHours: hint.storyPoints * 4, confidence: 'medium' }
+    return { estimatedHours: hint.storyPoints * 4, confidence: 'medium' }
   }
   // No story points: 8h default, low confidence
-  return { effortHours: 8, confidence: 'low' }
+  return { estimatedHours: 8, confidence: 'low' }
 }
 
 // ── Main estimation function ──────────────────────────────────
@@ -69,17 +69,17 @@ export function selectEffortAndConfidence(hint: WorkItemHint): {
 // The caller is responsible for merging the result back into the item.
 
 export function estimateWorkItem(
-  item: Omit<PlanningWorkItem, 'effortHours' | 'confidence' | 'primaryRole' | 'skillRequired' | 'sprintNumber'>,
+  item: Omit<PlanningWorkItem, 'estimatedHours' | 'confidence' | 'primaryRole' | 'skillRequired' | 'sprintNumber'>,
   hint: WorkItemHint = {}
-): Pick<PlanningWorkItem, 'effortHours' | 'confidence' | 'primaryRole' | 'skillRequired'> {
+): Pick<PlanningWorkItem, 'estimatedHours' | 'confidence' | 'primaryRole' | 'skillRequired'> {
   // Suppress unused-variable lint warning — item is the context anchor
   void item
 
   const primaryRole = selectPrimaryRole(hint)
-  const { effortHours, confidence } = selectEffortAndConfidence(hint)
+  const { estimatedHours, confidence } = selectEffortAndConfidence(hint)
   const skillRequired = SKILL_LABELS[primaryRole]
 
-  return { effortHours, confidence, primaryRole, skillRequired }
+  return { estimatedHours, confidence, primaryRole, skillRequired }
 }
 
 // ── Batch helper ──────────────────────────────────────────────
@@ -88,7 +88,7 @@ export function estimateWorkItem(
 
 export function estimateWorkItems(
   items: Array<
-    Omit<PlanningWorkItem, 'effortHours' | 'confidence' | 'primaryRole' | 'skillRequired' | 'sprintNumber'> & {
+    Omit<PlanningWorkItem, 'estimatedHours' | 'confidence' | 'primaryRole' | 'skillRequired' | 'sprintNumber'> & {
       _hint?: WorkItemHint
     }
   >

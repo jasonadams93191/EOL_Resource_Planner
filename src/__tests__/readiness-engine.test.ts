@@ -15,10 +15,9 @@ function makeWorkItem(overrides: Partial<PlanningWorkItem> = {}): PlanningWorkIt
     planningEpicId: 'epic-test',
     status: 'not-started',
     sourceRefs: [],
-    effortHours: 8,
+    estimatedHours: 8,
     confidence: 'medium',
     primaryRole: ResourceType.DEVELOPER,
-    effortInSprints: 0.5,
     primarySkill: 'skill-sf-config',
     requiredSkillLevel: 2,
     ...overrides,
@@ -56,7 +55,8 @@ function makeMember(overrides: Partial<TeamMember> = {}): TeamMember {
     id: 'tm-test',
     name: 'Test Member',
     primaryRoleId: 'role-sf-dev',
-    sprintCapacity: 1.0,
+    availableHoursPerSprint: 40,
+    utilizationTargetPercent: 85,
     isActive: true,
     userSkills: [{ skillId: 'skill-sf-config', level: 3 }],
     ...overrides,
@@ -91,32 +91,32 @@ describe('workItemReadiness', () => {
     expect(workItemReadiness(item)).toBe('partial')
   })
 
-  test('returns partial when effortInSprints is missing', () => {
-    const item = makeWorkItem({ effortInSprints: undefined })
+  test('returns partial when estimatedHours is 0', () => {
+    const item = makeWorkItem({ estimatedHours: 0 })
     expect(workItemReadiness(item)).toBe('partial')
   })
 
-  test('returns needs-breakdown when effortInSprints >= 3.0', () => {
-    const item = makeWorkItem({ effortInSprints: 3.0, confidence: 'high' })
+  test('returns needs-breakdown when estimatedHours exceeds SPLIT_THRESHOLD_HOURS (60)', () => {
+    const item = makeWorkItem({ estimatedHours: 61 })
     expect(workItemReadiness(item)).toBe('needs-breakdown')
   })
 
-  test('returns needs-breakdown when effortInSprints > 3.0', () => {
-    const item = makeWorkItem({ effortInSprints: 4.5, confidence: 'high' })
+  test('returns needs-breakdown when estimatedHours is exactly 61', () => {
+    const item = makeWorkItem({ estimatedHours: 80 })
     expect(workItemReadiness(item)).toBe('needs-breakdown')
   })
 
   test('returns needs-breakdown when splitRecommended is true', () => {
-    const item = makeWorkItem({ splitRecommended: true, effortInSprints: 0.5, confidence: 'high' })
+    const item = makeWorkItem({ splitRecommended: true })
     expect(workItemReadiness(item)).toBe('needs-breakdown')
   })
 
   test('needs-breakdown takes precedence over ready conditions', () => {
     const item = makeWorkItem({
-      effortInSprints: 3.5,
       confidence: 'high',
       requiredSkillLevel: 2,
       primarySkill: 'skill-sf-config',
+      estimatedHours: 80,  // > 60h threshold
     })
     expect(workItemReadiness(item)).toBe('needs-breakdown')
   })
@@ -141,8 +141,7 @@ describe('epicReadiness', () => {
 
   test('returns needs-breakdown when any work item is needs-breakdown', () => {
     const items = [
-      makeWorkItem({ id: 'wi-1', confidence: 'high' }),
-      makeWorkItem({ id: 'wi-2', effortInSprints: 3.5, confidence: 'high' }),
+      makeWorkItem({ id: 'wi-1', confidence: 'high', estimatedHours: 80 }),
     ]
     const epic = makeEpic(items)
     expect(epicReadiness(epic)).toBe('needs-breakdown')
@@ -159,8 +158,7 @@ describe('epicReadiness', () => {
 
   test('needs-breakdown takes precedence over partial', () => {
     const items = [
-      makeWorkItem({ id: 'wi-1', confidence: 'low' }),
-      makeWorkItem({ id: 'wi-2', effortInSprints: 5.0, confidence: 'low' }),
+      makeWorkItem({ id: 'wi-1', confidence: 'low', estimatedHours: 80 }),
     ]
     const epic = makeEpic(items)
     expect(epicReadiness(epic)).toBe('needs-breakdown')
@@ -241,7 +239,7 @@ describe('getInitiativeWarnings', () => {
   test('detects needs-breakdown warning via epic', () => {
     const project = makeProject({
       epics: [makeEpic([
-        makeWorkItem({ id: 'wi-1', effortInSprints: 4.0, confidence: 'high' }),
+        makeWorkItem({ id: 'wi-1', estimatedHours: 80 }),
         makeWorkItem({ id: 'wi-2' }),
       ])],
     })

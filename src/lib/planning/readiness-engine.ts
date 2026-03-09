@@ -14,6 +14,7 @@ import type {
   TeamMember,
   EstimateReadiness,
 } from '@/types/planning'
+import { SPLIT_THRESHOLD_HOURS } from '@/types/planning'
 import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
 
 // ── Work Item Readiness ────────────────────────────────────────
@@ -22,19 +23,19 @@ import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
  * Compute estimate readiness for a single work item.
  *
  * Rules:
- *   'ready':           has effortInSprints, primarySkill, requiredSkillLevel all set,
- *                      AND confidence is 'high' or 'medium'
- *   'needs-breakdown': effortInSprints >= 3.0 (XL work) OR splitRecommended=true
+ *   'ready':           estimatedHours > 0 and <= SPLIT_THRESHOLD_HOURS, primarySkill and
+ *                      requiredSkillLevel set, AND confidence is 'high' or 'medium'
+ *   'needs-breakdown': estimatedHours > SPLIT_THRESHOLD_HOURS OR splitRecommended=true
  *   'partial':         everything else
  */
 export function workItemReadiness(item: PlanningWorkItem): EstimateReadiness {
   // Needs breakdown takes precedence
-  if (item.splitRecommended || (item.effortInSprints != null && item.effortInSprints >= 3.0)) {
+  if (item.splitRecommended || item.estimatedHours > SPLIT_THRESHOLD_HOURS) {
     return 'needs-breakdown'
   }
 
-  // Ready: all fields set + medium/high confidence
-  const hasEffort = item.effortInSprints != null
+  // Ready: hours > 0, all fields set + medium/high confidence
+  const hasEffort = item.estimatedHours > 0
   const hasSkill = item.primarySkill != null && item.primarySkill !== ''
   const hasLevel = item.requiredSkillLevel != null
   const goodConfidence = item.confidence === 'high' || item.confidence === 'medium'

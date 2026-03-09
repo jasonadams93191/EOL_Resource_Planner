@@ -82,7 +82,7 @@ function MemberCard({
       {/* Capacity bar */}
       <div className="mb-3">
         <p className="text-xs text-gray-400 mb-1">Sprint capacity</p>
-        <CapacityBar capacity={member.isActive ? member.sprintCapacity : 0} />
+        <CapacityBar capacity={member.isActive ? member.utilizationTargetPercent / 100 : 0} />
       </div>
 
       {/* Skills */}
@@ -106,7 +106,7 @@ export function TeamView({ members, roles, skills, onToggleActive }: TeamViewPro
 
   const activeMembers = members.filter((m) => m.isActive)
   const inactiveMembers = members.filter((m) => !m.isActive)
-  const totalCapacity = activeMembers.reduce((s, m) => s + m.sprintCapacity, 0)
+  const totalAvailableHours = activeMembers.reduce((s, m) => s + m.availableHoursPerSprint, 0)
 
   const displayedMembers = showInactive ? members : activeMembers
 
@@ -116,7 +116,7 @@ export function TeamView({ members, roles, skills, onToggleActive }: TeamViewPro
       <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center gap-6 text-sm">
         <span className="font-medium text-gray-900">{activeMembers.length} active members</span>
         <span className="text-gray-500">
-          Total sprint capacity: <strong>{totalCapacity.toFixed(1)}</strong> sprints
+          Total sprint capacity: <strong>{totalAvailableHours}h</strong> available
         </span>
         {inactiveMembers.length > 0 && (
           <button

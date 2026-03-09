@@ -27,7 +27,7 @@ function makeWorkItem(overrides: Partial<PlanningWorkItem> = {}): PlanningWorkIt
     status: 'not-started',
     priority: 'medium',
     sourceRefs: [],
-    effortHours: 8,
+    estimatedHours: 8,
     confidence: 'low',
     primaryRole: ResourceType.DEVELOPER,
     ...overrides,
@@ -105,10 +105,10 @@ describe('scoreCandidate', () => {
   })
 
   it('awards capacityAvailability=0 when member has no remaining sprint capacity', () => {
-    const member = TEAM_MEMBERS.find((m) => m.id === 'tm-daniel')! // capacity 1.0
+    const member = TEAM_MEMBERS.find((m) => m.id === 'tm-daniel')! // 40h/sprint, 85% target = 34h
     const item = makeWorkItem()
     const context: AssignmentContext = {
-      currentSprintAllocations: { 'tm-daniel': 1.0 }, // fully allocated
+      currentSprintAllocations: { 'tm-daniel': 34 }, // at target (34h) — no remaining capacity
       existingProjectAssignments: new Set(),
     }
     const result = scoreCandidate(member, item, context)
@@ -195,13 +195,13 @@ describe('suggestAssignment', () => {
 
   it('sets splitRecommended=true for XL items (>2 sprint fractions)', () => {
     // 200h / 40 = 5 sprints → XL
-    const item = makeWorkItem({ effortHours: 200 })
+    const item = makeWorkItem({ estimatedHours: 200 })
     const result = suggestAssignment(TEAM_MEMBERS, item, emptyContext)
     expect(result.splitRecommended).toBe(true)
   })
 
   it('sets splitRecommended=false for small items', () => {
-    const item = makeWorkItem({ effortHours: 8 })
+    const item = makeWorkItem({ estimatedHours: 8 })
     const result = suggestAssignment(TEAM_MEMBERS, item, emptyContext)
     expect(result.splitRecommended).toBe(false)
   })

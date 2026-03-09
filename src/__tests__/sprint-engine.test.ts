@@ -103,7 +103,7 @@ describe('buildSprintPlan', () => {
       p.epics.forEach((e) => {
         e.workItems.forEach((wi) => {
           const sprint = plan.workItemAssignments[wi.id]
-          sprintLoad[sprint] = (sprintLoad[sprint] ?? 0) + wi.effortHours
+          sprintLoad[sprint] = (sprintLoad[sprint] ?? 0) + wi.estimatedHours
         })
       })
     })
@@ -126,7 +126,7 @@ describe('buildSprintPlan', () => {
       status: 'not-started' as const,
       priority: 'high' as const,
       sourceRefs: [],
-      effortHours: 50,
+      estimatedHours: 50,
       confidence: 'low' as const,
       primaryRole: ResourceType.DEVELOPER,
     }
@@ -137,7 +137,7 @@ describe('buildSprintPlan', () => {
       status: 'not-started' as const,
       priority: 'low' as const,
       sourceRefs: [],
-      effortHours: 50,
+      estimatedHours: 50,
       confidence: 'low' as const,
       primaryRole: ResourceType.DEVELOPER,
     }

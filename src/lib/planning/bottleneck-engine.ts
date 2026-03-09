@@ -6,6 +6,7 @@
 // ============================================================
 
 import type { PlanningProject, TeamMember, Skill, Role } from '@/types/planning'
+import { targetPlannedHours } from '@/types/planning'
 import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -67,13 +68,17 @@ function analyzePersonBottlenecks(
       )
       totalAllocated += sprintAllocated
 
-      // Overloaded if this sprint's allocation exceeds member's capacity
-      if (sprintAllocated > member.sprintCapacity) {
+      // Overloaded if this sprint's allocation (sprint fracs) exceeds target sprint fracs
+      // targetPlannedHours / availableHoursPerSprint = target fraction (e.g. 34/40 = 0.85)
+      const targetFraction = member.availableHoursPerSprint > 0
+        ? targetPlannedHours(member) / member.availableHoursPerSprint
+        : 0
+      if (sprintAllocated > targetFraction) {
         overloadedSprints.push(sprint.number)
       }
     }
 
-    const expectedTotal = member.sprintCapacity * totalSprints
+    const expectedTotal = (targetPlannedHours(member) / member.availableHoursPerSprint) * totalSprints
     const utilizationPct = expectedTotal > 0
       ? Math.round((totalAllocated / expectedTotal) * 100)
       : 0
@@ -85,7 +90,7 @@ function analyzePersonBottlenecks(
         memberName: member.name,
         overloadedSprints,
         totalAllocatedSprints: Math.round(totalAllocated * 100) / 100,
-        capacity: member.sprintCapacity,
+        capacity: member.availableHoursPerSprint,
         utilizationPct,
       })
     }
@@ -104,13 +109,13 @@ function analyzeSkillBottlenecks(
 ): SkillBottleneck[] {
   const bottlenecks: SkillBottleneck[] = []
 
-  // Build a lookup: workItemId → effortInSprints + primarySkill
-  const workItemMap = new Map<string, { effortInSprints: number; primarySkill?: string }>()
+  // Build a lookup: workItemId → estimatedHours + primarySkill
+  const workItemMap = new Map<string, { estimatedHours: number; primarySkill?: string }>()
   for (const project of projects) {
     for (const epic of project.epics) {
       for (const item of epic.workItems) {
         workItemMap.set(item.id, {
-          effortInSprints: item.effortInSprints ?? Math.max(0.25, item.effortHours / 40),
+          estimatedHours: item.estimatedHours,
           primarySkill: item.primarySkill,
         })
       }
@@ -118,7 +123,7 @@ function analyzeSkillBottlenecks(
   }
 
   for (const skill of skills) {
-    // Demand: sum of effortInSprints for all placed + overflow work items requiring this skill
+    // Demand: sum of effortInSprints (derived) for all placed + overflow work items requiring this skill
     const affectedWorkItemIds: string[] = []
     let demandInSprints = 0
 
@@ -128,18 +133,21 @@ function analyzeSkillBottlenecks(
     for (const wid of allPlacedAndOverflow) {
       const wi = workItemMap.get(wid)
       if (wi && wi.primarySkill === skill.id) {
-        demandInSprints += wi.effortInSprints
+        // Use placement effortInSprints if available, otherwise derive at 40h/sprint default
+        const placement = roadmap.workItemPlacements.find((p) => p.workItemId === wid)
+        const effortInSprints = placement?.effortInSprints ?? Math.max(0.25, wi.estimatedHours / 40)
+        demandInSprints += effortInSprints
         affectedWorkItemIds.push(wid)
       }
     }
 
     if (demandInSprints === 0) continue // skill not in demand — skip
 
-    // Supply: sum of sprintCapacity for active members with this skill (level > 0)
+    // Supply: sum of targetPlannedHours (in sprint fracs) for active members with this skill
     const supplyInSprints = members
       .filter((m) => m.isActive)
       .filter((m) => m.userSkills.some((us) => us.skillId === skill.id && us.level > 0))
-      .reduce((sum, m) => sum + m.sprintCapacity * roadmap.totalSprints, 0)
+      .reduce((sum, m) => sum + (targetPlannedHours(m) / m.availableHoursPerSprint) * roadmap.totalSprints, 0)
 
     const gapInSprints = Math.round((demandInSprints - supplyInSprints) * 100) / 100
 

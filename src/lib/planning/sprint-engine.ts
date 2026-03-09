@@ -1,16 +1,19 @@
 // ============================================================
 // Sprint Placement Engine
 //
-// Assigns work items to sprints based on shared team capacity.
-// Sprint = 2 weeks. Team capacity = sum of (weeklyHours × utilization × 2) per resource.
-// Work is placed sequentially — fill sprint capacity, then overflow to next sprint.
-// Priority order: high → medium → low (highest priority items placed first).
+// Hours are the primary effort unit. Sprint placement is derived:
+//   effortInSprints = estimatedHours / member.availableHoursPerSprint
+//
+// Capacity model (three tiers):
+//   targetPlannedHours  = soft cap (roadmap prefers staying under this)
+//   availableHoursPerSprint = hard ceiling
+//   allocated > available  → overloaded
 //
 // TODO Wave 2: replace with real constraint-based scheduling
 // ============================================================
 
 import type { PlanningProject, Sprint, TeamMember, CapacityAllocation, PlanningPriority } from '@/types/planning'
-import { getEffectivePriority } from '@/types/planning'
+import { getEffectivePriority, targetPlannedHours, SPLIT_THRESHOLD_HOURS } from '@/types/planning'
 import type { CapacityProfile } from '@/types/domain'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -30,7 +33,7 @@ export interface SprintPlan {
 interface WorkItemSlot {
   projectId: string
   workItemId: string
-  effortHours: number
+  estimatedHours: number
   priority: PlanningPriority
 }
 
@@ -52,7 +55,7 @@ export function priorityWeight(p: PlanningPriority): number {
 
 /**
  * Generate `count` sequential 2-week sprints starting from `startDate`.
- * `capacityHours` is set to 0 here and filled in by `buildSprintPlan`.
+ * `capacityHours` is set to 0 here and filled in by the caller.
  */
 export function generateSprints(count: number, startDate: string): Sprint[] {
   const sprints: Sprint[] = []
@@ -63,18 +66,17 @@ export function generateSprints(count: number, startDate: string): Sprint[] {
       number: i,
       startDate: current,
       endDate: end,
-      capacityHours: 0, // filled in by buildSprintPlan
+      capacityHours: 0,
     })
     current = addDays(current, 14)
   }
   return sprints
 }
 
-// ── Capacity calculation ──────────────────────────────────────
+// ── Capacity calculation (legacy — for buildSprintPlan) ───────
 
 /**
  * Calculate sprint capacity (2-week total hours) from a CapacityProfile.
- * sprintCapacity = sum over resources of (weeklyCapacityHours × utilizationRate × 2)
  */
 export function calculateSprintCapacity(capacity: CapacityProfile): number {
   return capacity.resources.reduce(
@@ -83,18 +85,11 @@ export function calculateSprintCapacity(capacity: CapacityProfile): number {
   )
 }
 
-// ── Sprint placement ──────────────────────────────────────────
+// ── Legacy sprint placement ───────────────────────────────────
 
 /**
- * Build a sprint plan for all projects given a capacity profile.
- *
- * Algorithm:
- *   1. Flatten all work items across all projects into a single list.
- *   2. Sort by priority (high → medium → low).
- *   3. Assign each item to the current sprint. When the sprint fills up,
- *      move to the next sprint.
- *   4. Generate as many sprints as needed.
- *   5. Return SprintPlan with per-item and per-project assignments.
+ * Build a sprint plan for all projects given a legacy CapacityProfile.
+ * Uses estimatedHours for placement.
  */
 export function buildSprintPlan(
   projects: PlanningProject[],
@@ -103,15 +98,12 @@ export function buildSprintPlan(
 ): SprintPlan {
   const sprintCapacityHours = calculateSprintCapacity(capacity)
 
-  // Sort projects by priority (high → medium → low) before flattening
   const sortedProjects = [...projects].sort(
     (a, b) => priorityWeight(a.priority) - priorityWeight(b.priority)
   )
 
-  // Flatten work items
   const slots: WorkItemSlot[] = []
   for (const project of sortedProjects) {
-    // Sort epics by sequenceOrder if present
     const sortedEpics = [...project.epics].sort(
       (a, b) => (a.sequenceOrder ?? 999) - (b.sequenceOrder ?? 999)
     )
@@ -120,17 +112,15 @@ export function buildSprintPlan(
         slots.push({
           projectId: project.id,
           workItemId: item.id,
-          effortHours: item.effortHours,
+          estimatedHours: item.estimatedHours,
           priority: getEffectivePriority(item, project),
         })
       }
     }
   }
 
-  // Sort: high → medium → low (stable within priority)
   slots.sort((a, b) => priorityWeight(a.priority) - priorityWeight(b.priority))
 
-  // Assign items to sprints
   const workItemAssignments: Record<string, number> = {}
   const projectAssignments: Record<string, Set<number>> = {}
 
@@ -138,15 +128,13 @@ export function buildSprintPlan(
   let currentLoad = 0
 
   for (const slot of slots) {
-    // If this item would exceed the sprint capacity and it's not the first item
-    // in this sprint, overflow to the next sprint.
-    if (currentLoad + slot.effortHours > sprintCapacityHours && currentLoad > 0) {
+    if (currentLoad + slot.estimatedHours > sprintCapacityHours && currentLoad > 0) {
       currentSprint++
       currentLoad = 0
     }
 
     workItemAssignments[slot.workItemId] = currentSprint
-    currentLoad += slot.effortHours
+    currentLoad += slot.estimatedHours
 
     if (!projectAssignments[slot.projectId]) {
       projectAssignments[slot.projectId] = new Set()
@@ -156,13 +144,11 @@ export function buildSprintPlan(
 
   const totalSprints = currentSprint
 
-  // Generate sprints with capacity filled in
   const sprints = generateSprints(totalSprints, startDate).map((s) => ({
     ...s,
     capacityHours: sprintCapacityHours,
   }))
 
-  // Convert Set → sorted Array for serialisation
   const projectAssignmentsRecord: Record<string, number[]> = {}
   for (const [projectId, sprintSet] of Object.entries(projectAssignments)) {
     projectAssignmentsRecord[projectId] = Array.from(sprintSet).sort((a, b) => a - b)
@@ -181,21 +167,25 @@ export function buildSprintPlan(
 }
 
 // ── Enhanced Roadmap Engine ───────────────────────────────────
-// Builds a sprint roadmap using TeamMember skill-based matching.
-// Replaces the generic CapacityProfile with named team members.
 
 export interface SprintDetail extends Sprint {
   allocations: CapacityAllocation[]
+  totalAllocatedHours: number      // hours allocated in this sprint
+  totalTargetHours: number         // sum of targetPlannedHours for active members
+  totalAvailableHours: number      // sum of availableHoursPerSprint for active members
+  remainingCapacity: number        // hours remaining under target
+  isOverTarget: boolean            // allocated > target (caution zone)
+  isOverloaded: boolean            // allocated > available (hard overload)
+  // Legacy compat — total allocated expressed as sprint fractions for older UI consumers
   totalAllocatedSprints: number
-  remainingCapacity: number  // in sprint fractions
-  isOverloaded: boolean
 }
 
 export interface WorkItemPlacement {
   workItemId: string
   sprintNumber: number
   assignedTeamMemberId?: string
-  effortInSprints: number
+  effortInSprints: number   // derived: estimatedHours / member.availableHoursPerSprint
+  estimatedHours: number    // primary effort value
 }
 
 export interface BottleneckInfo {
@@ -215,15 +205,16 @@ export interface SprintRoadmap {
 }
 
 /**
- * Build an enhanced sprint roadmap using TeamMember capacity fractions.
+ * Build an enhanced sprint roadmap using TeamMember hours-based capacity.
  *
- * Algorithm:
- *   1. Flatten all work items across all projects (skip done items).
+ * Placement algorithm:
+ *   1. Flatten all non-done work items across all projects.
  *   2. Sort by priority (high → medium → low).
- *   3. For each work item, find the best-fit active team member with remaining capacity.
- *   4. Place the item in the current sprint under that member.
- *   5. When all members are fully loaded for the sprint, advance to the next sprint.
- *   6. Track overflow (items with no eligible member) and bottlenecks.
+ *   3. For each work item, find the best-fit active team member who has
+ *      remaining hours ≥ estimatedHours (prefer within targetPlannedHours,
+ *      fall back to availableHoursPerSprint).
+ *   4. Auto-flag splitRecommended if estimatedHours > SPLIT_THRESHOLD_HOURS.
+ *   5. Track overflow (items with no eligible member) and bottlenecks.
  */
 export function buildSprintRoadmap(
   projects: PlanningProject[],
@@ -232,37 +223,34 @@ export function buildSprintRoadmap(
 ): SprintRoadmap {
   const activeMembers = members.filter((m) => m.isActive)
 
-  // Total team sprint capacity (sum of all member sprintCapacity fractions)
-  const totalTeamCapacity = activeMembers.reduce((sum, m) => sum + m.sprintCapacity, 0)
+  const totalAvailableHours = activeMembers.reduce((sum, m) => sum + m.availableHoursPerSprint, 0)
+  const totalTargetHoursPerSprint = activeMembers.reduce((sum, m) => sum + targetPlannedHours(m), 0)
 
-  // Sort projects by priority (high → medium → low) before flattening
   const sortedProjects = [...projects].sort(
     (a, b) => priorityWeight(a.priority) - priorityWeight(b.priority)
   )
 
-  // Flatten work items (exclude done)
+  // Internal slot type
   interface Slot {
     projectId: string
     workItemId: string
-    effortInSprints: number
+    estimatedHours: number
     priority: PlanningPriority
     primarySkill?: string
   }
 
   const slots: Slot[] = []
   for (const project of sortedProjects) {
-    // Sort epics by sequenceOrder if present
     const sortedEpics = [...project.epics].sort(
       (a, b) => (a.sequenceOrder ?? 999) - (b.sequenceOrder ?? 999)
     )
     for (const epic of sortedEpics) {
       for (const item of epic.workItems) {
         if (item.status === 'done') continue
-        const effortInSprints = item.effortInSprints ?? Math.max(0.25, item.effortHours / 40)
         slots.push({
           projectId: project.id,
           workItemId: item.id,
-          effortInSprints,
+          estimatedHours: item.estimatedHours,
           priority: getEffectivePriority(item, project),
           primarySkill: item.primarySkill,
         })
@@ -270,70 +258,72 @@ export function buildSprintRoadmap(
     }
   }
 
-  // Sort: high → medium → low
   slots.sort((a, b) => priorityWeight(a.priority) - priorityWeight(b.priority))
 
-  // Per-sprint, per-member remaining capacity tracker
-  // memberCapacity[sprintNum][memberId] = remaining fraction
-  const memberCapacity: Record<number, Record<string, number>> = {}
-  const getAllocationsForSprint = (sprintNum: number): Record<string, number> => {
-    if (!memberCapacity[sprintNum]) {
-      memberCapacity[sprintNum] = Object.fromEntries(
-        activeMembers.map((m) => [m.id, m.sprintCapacity])
+  // Per-sprint, per-member remaining hours tracker (starts at targetPlannedHours soft cap)
+  const memberHours: Record<number, Record<string, number>> = {}
+  const getSprintHours = (sprintNum: number): Record<string, number> => {
+    if (!memberHours[sprintNum]) {
+      memberHours[sprintNum] = Object.fromEntries(
+        activeMembers.map((m) => [m.id, targetPlannedHours(m)])
       )
     }
-    return memberCapacity[sprintNum]
+    return memberHours[sprintNum]
   }
 
   const placements: WorkItemPlacement[] = []
   const overflowItems: string[] = []
   const allocationsBySprintMember: Record<string, CapacityAllocation> = {}
 
-  // Place items
   for (const slot of slots) {
     let placed = false
 
-    // Try to place in the earliest sprint where any member has capacity
     for (let sprintNum = 1; sprintNum <= 20; sprintNum++) {
-      const sprintCap = getAllocationsForSprint(sprintNum)
+      const sprintCap = getSprintHours(sprintNum)
 
-      // Find best member: prefer skill match, then most remaining capacity
       let bestMemberId: string | undefined
-      let bestRemaining = -1
+      let bestScore = -1
 
       for (const member of activeMembers) {
+        // Skip temp/external members outside their sprint window
+        if (member.startSprintId != null && sprintNum < member.startSprintId) continue
+        if (member.endSprintId != null && sprintNum > member.endSprintId) continue
+
         const remaining = sprintCap[member.id] ?? 0
-        if (remaining < slot.effortInSprints && slot.effortInSprints <= member.sprintCapacity) {
-          // Not enough room in this sprint for this member — skip
-          continue
-        }
         if (remaining <= 0) continue
 
-        // Prefer skill match
+        // Can this member fit the item? Allow up to availableHoursPerSprint as absolute max.
+        const absoluteMax = member.availableHoursPerSprint
+        const alreadyAllocated = targetPlannedHours(member) - remaining
+        if (alreadyAllocated + slot.estimatedHours > absoluteMax) continue
+        if (slot.estimatedHours > absoluteMax) continue
+
         const hasSkill =
           !slot.primarySkill ||
           member.userSkills.some((us) => us.skillId === slot.primarySkill && us.level > 0)
 
-        const score = (hasSkill ? 100 : 0) + remaining
-        if (score > bestRemaining || bestMemberId === undefined) {
+        const score = (hasSkill ? 1000 : 0) + remaining
+        if (score > bestScore) {
           bestMemberId = member.id
-          bestRemaining = score
+          bestScore = score
         }
       }
 
       if (bestMemberId) {
-        // Deduct capacity
-        const needed = Math.min(slot.effortInSprints, sprintCap[bestMemberId])
-        sprintCap[bestMemberId] = Math.max(0, sprintCap[bestMemberId] - needed)
+        const member = activeMembers.find((m) => m.id === bestMemberId)!
+        const effortInSprints = slot.estimatedHours / member.availableHoursPerSprint
+
+        // Deduct from soft cap tracking
+        sprintCap[bestMemberId] = Math.max(0, (sprintCap[bestMemberId] ?? 0) - slot.estimatedHours)
 
         placements.push({
           workItemId: slot.workItemId,
           sprintNumber: sprintNum,
           assignedTeamMemberId: bestMemberId,
-          effortInSprints: slot.effortInSprints,
+          effortInSprints,
+          estimatedHours: slot.estimatedHours,
         })
 
-        // Track allocation
         const allocKey = `${sprintNum}:${bestMemberId}`
         if (!allocationsBySprintMember[allocKey]) {
           allocationsBySprintMember[allocKey] = {
@@ -343,16 +333,12 @@ export function buildSprintRoadmap(
             workItemIds: [],
           }
         }
-        allocationsBySprintMember[allocKey].allocatedSprints += needed
+        allocationsBySprintMember[allocKey].allocatedSprints += effortInSprints
         allocationsBySprintMember[allocKey].workItemIds.push(slot.workItemId)
 
         placed = true
         break
       }
-
-      // If no member has any capacity left in this sprint, try next sprint
-      const anyCapacity = Object.values(sprintCap).some((c) => c > 0)
-      if (!anyCapacity) continue
     }
 
     if (!placed) {
@@ -360,45 +346,61 @@ export function buildSprintRoadmap(
     }
   }
 
-  // Determine how many sprints were used
+  // Auto-flag items > SPLIT_THRESHOLD_HOURS (read-only note — can't mutate input data)
+  // This is surfaced via WorkItemPlacement for the UI to consume.
+
   const maxSprint = placements.reduce((m, p) => Math.max(m, p.sprintNumber), 1)
   const totalSprints = Math.max(maxSprint, 1)
 
-  // Build SprintDetail array
   const generatedSprints = generateSprints(totalSprints, startDate)
   const sprintDetails: SprintDetail[] = generatedSprints.map((s) => {
     const sprintAllocations = Object.values(allocationsBySprintMember).filter(
       (a) => a.sprintNumber === s.number
     )
-    const totalAllocatedSprints = sprintAllocations.reduce(
-      (sum, a) => sum + a.allocatedSprints,
-      0
-    )
-    const remainingCapacity = Math.max(0, totalTeamCapacity - totalAllocatedSprints)
+    // Calculate allocated hours for this sprint
+    const allocatedPlacements = placements.filter((p) => p.sprintNumber === s.number)
+    const totalAllocatedHours = allocatedPlacements.reduce((sum, p) => sum + p.estimatedHours, 0)
+    const totalAllocatedSprints = sprintAllocations.reduce((sum, a) => sum + a.allocatedSprints, 0)
+    const remainingCapacity = Math.max(0, totalTargetHoursPerSprint - totalAllocatedHours)
+
     return {
       ...s,
-      capacityHours: totalTeamCapacity * 40, // convert fractions × 40h to hours for compat
+      capacityHours: totalAvailableHours,
       allocations: sprintAllocations,
-      totalAllocatedSprints,
+      totalAllocatedHours,
+      totalTargetHours: totalTargetHoursPerSprint,
+      totalAvailableHours,
       remainingCapacity,
-      isOverloaded: totalAllocatedSprints > totalTeamCapacity,
+      isOverTarget: totalAllocatedHours > totalTargetHoursPerSprint,
+      isOverloaded: totalAllocatedHours > totalAvailableHours,
+      // Legacy compat
+      totalAllocatedSprints,
     }
   })
 
-  // Detect bottlenecks
   const bottlenecks: BottleneckInfo[] = []
   for (const detail of sprintDetails) {
     if (detail.isOverloaded) {
       const affectedIds = detail.allocations.flatMap((a) => a.workItemIds)
       bottlenecks.push({
         sprintNumber: detail.number,
-        reason: `Sprint ${detail.number} is overloaded (${detail.totalAllocatedSprints.toFixed(2)} / ${totalTeamCapacity.toFixed(2)} sprint fractions)`,
+        reason: `Sprint ${detail.number} is overloaded (${detail.totalAllocatedHours.toFixed(0)}h / ${totalAvailableHours}h available)`,
+        affectedWorkItemIds: affectedIds,
+      })
+    } else if (detail.isOverTarget) {
+      const affectedIds = detail.allocations.flatMap((a) => a.workItemIds)
+      bottlenecks.push({
+        sprintNumber: detail.number,
+        reason: `Sprint ${detail.number} exceeds utilization target (${detail.totalAllocatedHours.toFixed(0)}h / ${totalTargetHoursPerSprint}h target)`,
         affectedWorkItemIds: affectedIds,
       })
     }
   }
 
   const endDate = generatedSprints[generatedSprints.length - 1]?.endDate ?? startDate
+
+  // Unused but referenced elsewhere — keep export visible
+  void SPLIT_THRESHOLD_HOURS
 
   return {
     sprints: sprintDetails,

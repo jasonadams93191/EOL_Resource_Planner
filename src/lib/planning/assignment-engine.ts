@@ -18,7 +18,7 @@
 // ============================================================
 
 import type { TeamMember, PlanningWorkItem, AssignmentScoreBreakdown, WorkItemEstimate, EffortSize, SkillLevel } from '@/types/planning'
-import { EFFORT_SIZE_SPRINTS } from '@/types/planning'
+import { targetPlannedHours, SPLIT_THRESHOLD_HOURS } from '@/types/planning'
 
 // ── Context ───────────────────────────────────────────────────
 
@@ -151,19 +151,20 @@ export function scoreCandidate(
 
   // 5. Capacity Availability (0–10)
   let capacityAvailability = 0
-  const allocated = context.currentSprintAllocations[member.id] ?? 0
-  const remaining = member.sprintCapacity - allocated
-  if (remaining >= 1.0) {
+  const allocatedHours = context.currentSprintAllocations[member.id] ?? 0
+  const targetHours = targetPlannedHours(member)
+  const remainingHours = targetHours - allocatedHours
+  if (remainingHours >= targetHours * 0.75) {
     capacityAvailability = 10
-    reasons.push(`Full sprint available (${remaining.toFixed(2)} remaining)`)
-  } else if (remaining >= 0.5) {
+    reasons.push(`High capacity available (${remainingHours.toFixed(0)}h remaining vs ${targetHours}h target)`)
+  } else if (remainingHours >= targetHours * 0.25) {
     capacityAvailability = 7
-    reasons.push(`Half sprint available (${remaining.toFixed(2)} remaining)`)
-  } else if (remaining > 0) {
+    reasons.push(`Moderate capacity available (${remainingHours.toFixed(0)}h remaining vs ${targetHours}h target)`)
+  } else if (remainingHours > 0) {
     capacityAvailability = 3
-    reasons.push(`Limited capacity (${remaining.toFixed(2)} remaining)`)
+    reasons.push(`Limited capacity (${remainingHours.toFixed(0)}h remaining vs ${targetHours}h target)`)
   } else {
-    reasons.push(`No capacity remaining`)
+    reasons.push(`At or over utilization target (${targetHours}h)`)
   }
 
   // 6. Continuity (0–5)
@@ -177,11 +178,11 @@ export function scoreCandidate(
   let priorityUrgencyFit = 0
   const urgency = item.urgency ?? (item.priority === 'high' ? 'high' : 'normal')
   if (urgency === 'critical' || urgency === 'high') {
-    // High-urgency items prefer higher-capacity members
-    if (member.sprintCapacity >= 0.9) {
+    // High-urgency items prefer members with more available planned hours
+    if (targetPlannedHours(member) >= 32) {
       priorityUrgencyFit = 5
-      reasons.push(`High capacity member for urgent item`)
-    } else if (member.sprintCapacity >= 0.5) {
+      reasons.push(`High target hours member for urgent item`)
+    } else if (targetPlannedHours(member) >= 20) {
       priorityUrgencyFit = 3
     }
   } else {
@@ -237,10 +238,10 @@ export function suggestAssignment(
   context: AssignmentContext
 ): WorkItemEstimate {
   const candidates = rankCandidates(members, item, context)
-  const effortHours = item.effortHours
-  const effortSize = hoursToEffortSize(effortHours)
-  const effortInSprints = item.effortInSprints ?? hoursToSprints(effortHours)
-  const splitRecommended = effortInSprints > EFFORT_SIZE_SPRINTS['L']
+  const estimatedHours = item.estimatedHours
+  const effortSize = hoursToEffortSize(estimatedHours)
+  const effortInSprints = hoursToSprints(estimatedHours)
+  const splitRecommended = estimatedHours > SPLIT_THRESHOLD_HOURS
 
   // Confidence: if top candidate has high score, raise to 'high'; if no good match, 'low'
   const topScore = candidates[0]?.totalScore ?? 0

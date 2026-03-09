@@ -90,7 +90,7 @@ function ProjectSummaryCard({
   const colors = PORTFOLIO_COLORS[project.portfolio]
   const totalItems = project.epics.reduce((s, e) => s + e.workItems.length, 0)
   const totalHours = project.epics.reduce(
-    (s, e) => s + e.workItems.reduce((si, wi) => si + wi.effortHours, 0),
+    (s, e) => s + e.workItems.reduce((si, wi) => si + wi.estimatedHours, 0),
     0
   )
   const doneItems = project.epics.reduce(

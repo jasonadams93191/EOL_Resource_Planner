@@ -133,7 +133,7 @@ export default function PlanningPage() {
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Capacity vs Load</h3>
             <CapacityChart
               roadmap={roadmap}
-              totalTeamCapacity={scenarioMembers.filter(m => m.isActive).reduce((s, m) => s + m.sprintCapacity, 0)}
+              totalTeamCapacity={scenarioMembers.filter(m => m.isActive).reduce((s, m) => s + m.availableHoursPerSprint, 0)}
             />
           </section>
           <details className="border border-gray-200 rounded-lg">

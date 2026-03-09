@@ -101,12 +101,11 @@ export function normalizePlanningWorkItem(
     planningEpicId,
     status: toPlanningStatus(issue.status),
     priority: toPlanningPriority(issue.priority),
-    estimatedHours: issue.storyPoints ? issue.storyPoints * 4 : undefined,
     assigneeId: issue.assigneeId,
     sourceRefs: [jiraIssueRef(issue)],
     notes: undefined,
     // Required Phase 1 fields — defaults that callers can override
-    effortHours: 8,
+    estimatedHours: issue.storyPoints ? issue.storyPoints * 4 : 8,
     confidence: 'low',
     primaryRole: ResourceType.DEVELOPER,
     ...overrides,

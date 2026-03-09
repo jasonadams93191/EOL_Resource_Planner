@@ -148,13 +148,14 @@ export function ResourceTimelineView({ roadmap, projects, members }: ResourceTim
                 {/* Member name (sticky) */}
                 <td className="sticky left-0 z-10 bg-white border-r border-gray-200 px-3 py-2">
                   <div className="font-medium text-gray-800 whitespace-nowrap">{member.name}</div>
-                  <div className="text-gray-400">{(member.sprintCapacity * 100).toFixed(0)}% capacity</div>
+                  <div className="text-gray-400">{member.availableHoursPerSprint}h · {member.utilizationTargetPercent}% target</div>
                 </td>
                 {/* Sprint cells */}
                 {Array.from({ length: totalSprints }, (_, i) => i + 1).map((sprintNum) => {
                   const placements = sprintMap?.get(sprintNum) ?? []
                   const allocated = memberSprintAllocated.get(member.id)?.get(sprintNum) ?? 0
-                  const isOverloaded = allocated > member.sprintCapacity
+                  const targetFraction = member.utilizationTargetPercent / 100
+                  const isOverloaded = allocated > targetFraction
 
                   return (
                     <td
@@ -175,7 +176,7 @@ export function ResourceTimelineView({ roadmap, projects, members }: ResourceTim
                               </div>
                             )
                           })}
-                          <CapacityBar allocated={allocated} capacity={member.sprintCapacity} />
+                          <CapacityBar allocated={allocated} capacity={targetFraction} />
                         </div>
                       ) : (
                         <div className="text-gray-200 text-center">—</div>

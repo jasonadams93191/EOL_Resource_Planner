@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { TeamMember, PlanningProject, PlanningPriority } from '@/types/planning'
+import { TEMP_RESOURCE_TEMPLATES } from '@/lib/planning/acceleration-engine'
 
 interface ScenarioState {
   members: TeamMember[]
@@ -28,9 +29,9 @@ export function ScenarioControls({
   const [projects, setProjects] = useState<PlanningProject[]>(initialProjects)
   const [scenarioStartDate, setScenarioStartDate] = useState(startDate)
 
-  function updateCapacity(memberId: string, capacity: number) {
+  function updateCapacity(memberId: string, utilizationTargetPercent: number) {
     setMembers((prev) =>
-      prev.map((m) => (m.id === memberId ? { ...m, sprintCapacity: capacity } : m))
+      prev.map((m) => (m.id === memberId ? { ...m, utilizationTargetPercent } : m))
     )
   }
 
@@ -48,6 +49,31 @@ export function ScenarioControls({
     setProjects((prev) =>
       prev.map((p) => (p.id === projectId ? { ...p, priority } : p))
     )
+  }
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(TEMP_RESOURCE_TEMPLATES[0].id)
+  const [tempSprintWindow, setTempSprintWindow] = useState<number>(4)
+
+  function addTempResource() {
+    const template = TEMP_RESOURCE_TEMPLATES.find((t) => t.id === selectedTemplateId)
+    if (!template) return
+    const tempMember: TeamMember = {
+      id: `tmp-${template.id}-${Date.now()}`,
+      name: `${template.label} (Temp)`,
+      primaryRoleId: template.primaryRoleId,
+      userSkills: template.skills,
+      availableHoursPerSprint: template.availableHoursPerSprint,
+      utilizationTargetPercent: template.utilizationTargetPercent,
+      isActive: true,
+      resourceKind: 'temp',
+      startSprintId: 1,
+      endSprintId: tempSprintWindow,
+    }
+    setMembers((prev) => [...prev, tempMember])
+  }
+
+  function removeTempResource(id: string) {
+    setMembers((prev) => prev.filter((m) => m.id !== id))
   }
 
   function reset() {
@@ -116,15 +142,15 @@ export function ScenarioControls({
                     <input
                       type="range"
                       min={0}
-                      max={1}
-                      step={0.1}
-                      value={member.sprintCapacity}
+                      max={100}
+                      step={5}
+                      value={member.utilizationTargetPercent}
                       disabled={!member.isActive}
                       onChange={(e) => updateCapacity(member.id, parseFloat(e.target.value))}
                       className="flex-1 accent-indigo-600 disabled:opacity-40"
                     />
                     <span className="text-sm text-gray-600 w-10 text-right">
-                      {Math.round(member.sprintCapacity * 100)}%
+                      {Math.round(member.utilizationTargetPercent)}%
                     </span>
                   </div>
                 </div>
@@ -141,6 +167,63 @@ export function ScenarioControls({
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Add Temp Resource */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">Add Temp Resource</h3>
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => setSelectedTemplateId(e.target.value)}
+              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {TEMP_RESOURCE_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>{t.label}</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1 shrink-0">
+              <label className="text-xs text-gray-500 whitespace-nowrap">Window:</label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={tempSprintWindow}
+                onChange={(e) => setTempSprintWindow(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-14 rounded border border-gray-300 px-1.5 py-1 text-sm text-center"
+              />
+              <span className="text-xs text-gray-400">sp</span>
+            </div>
+            <button
+              onClick={addTempResource}
+              className="shrink-0 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+            >
+              + Add
+            </button>
+          </div>
+          {/* Active temp resources */}
+          {members.filter((m) => m.resourceKind === 'temp' || m.resourceKind === 'external').length > 0 && (
+            <div className="space-y-1">
+              {members
+                .filter((m) => m.resourceKind === 'temp' || m.resourceKind === 'external')
+                .map((m) => (
+                  <div key={m.id} className="flex items-center justify-between rounded bg-indigo-50 border border-indigo-100 px-2 py-1">
+                    <span className="text-xs text-indigo-800 font-medium">{m.name}</span>
+                    {m.endSprintId != null && (
+                      <span className="text-xs text-indigo-400 mx-2">Sprints 1–{m.endSprintId}</span>
+                    )}
+                    <button
+                      onClick={() => removeTempResource(m.id)}
+                      className="text-xs text-red-400 hover:text-red-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
       </div>
 
