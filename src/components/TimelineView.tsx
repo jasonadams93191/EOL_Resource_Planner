@@ -93,6 +93,12 @@ function fmtMonthShort(iso: string): string {
   })
 }
 
+function fmtDayOfWeek(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', {
+    weekday: 'short', timeZone: 'UTC',
+  })
+}
+
 function isoWeekNumber(iso: string): number {
   const d = new Date(iso + 'T00:00:00Z')
   // ISO 8601 week: week containing Thursday
@@ -121,15 +127,15 @@ function overlaps(colStart: string, colEnd: string, rowStart: string, rowEnd: st
 // ── Column builder ─────────────────────────────────────────────
 
 const PAGE_SIZE: Record<Granularity, number> = {
-  weekly: 16,
-  monthly: 8,
-  quarterly: 6,
+  weekly: 14,     // 2 weeks of day columns
+  monthly: 12,    // ~3 months of week columns
+  quarterly: 9,   // 3 quarters of month columns
 }
 
 const COL_WIDTH: Record<Granularity, number> = {
-  weekly: 80,
-  monthly: 110,
-  quarterly: 130,
+  weekly: 48,     // day columns — narrow
+  monthly: 80,    // week columns
+  quarterly: 110, // month columns
 }
 
 function buildColumns(
@@ -145,6 +151,27 @@ function buildColumns(
   const cols: TimeColumn[] = []
 
   if (granularity === 'weekly') {
+    // Weekly view: one column per DAY
+    let cursor = rangeStart
+    while (cursor <= rangeEnd) {
+      const colStart = cursor
+      const colEnd = cursor // single day
+      const sprintsInCol = allSprints.filter(
+        (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
+      )
+      cols.push({
+        key: colStart,
+        label: fmtDayOfWeek(cursor),      // "Mon", "Tue", ...
+        subLabel: fmtShort(cursor),        // "Mar 10"
+        startDate: colStart,
+        endDate: colEnd,
+        isProjected: sprintsInCol.every((s) => projectedNums.has(s.number)),
+        isOverloaded: sprintsInCol.some((s) => overloadedNums.has(s.number)),
+      })
+      cursor = addDays(cursor, 1)
+    }
+  } else if (granularity === 'monthly') {
+    // Monthly view: one column per WEEK
     let cursor = rangeStart
     while (cursor <= rangeEnd) {
       const colStart = cursor
@@ -152,20 +179,19 @@ function buildColumns(
       const sprintsInCol = allSprints.filter(
         (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
       )
-      // Sub-label: individual week start date (e.g. "Mar 9")
-      const subLabel = fmtShort(colStart)
       cols.push({
         key: colStart,
         label: `${fmtShort(colStart)}–${fmtShort(colEnd)}`,
-        subLabel,
+        subLabel: `Wk${isoWeekNumber(colStart)}`,
         startDate: colStart,
         endDate: colEnd,
-        isProjected: sprintsInCol.every((s) => projectedNums.has(s.number)),
+        isProjected: sprintsInCol.length > 0 && sprintsInCol.every((s) => projectedNums.has(s.number)),
         isOverloaded: sprintsInCol.some((s) => overloadedNums.has(s.number)),
       })
       cursor = addDays(cursor, 7)
     }
-  } else if (granularity === 'monthly') {
+  } else {
+    // Quarterly view: one column per MONTH
     let cursor = startOfMonth(rangeStart)
     while (cursor <= rangeEnd) {
       const colStart = cursor
@@ -173,7 +199,6 @@ function buildColumns(
       const sprintsInCol = allSprints.filter(
         (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
       )
-      // Sub-label: ISO week numbers within this month (e.g. "Wk10 · 11 · 12 · 13")
       const wks = weeksInRange(colStart, colEnd)
       const subLabel = wks.length > 0 ? `Wk${wks[0]}` + wks.slice(1).map(w => ` · ${w}`).join('') : ''
       cols.push({
@@ -186,30 +211,6 @@ function buildColumns(
         isOverloaded: sprintsInCol.some((s) => overloadedNums.has(s.number)),
       })
       cursor = addMonths(cursor, 1)
-    }
-  } else {
-    // quarterly
-    let cursor = quarterStart(rangeStart)
-    while (cursor <= rangeEnd) {
-      const colStart = cursor
-      const colEnd = endOfMonth(addMonths(cursor, 2))
-      const sprintsInCol = allSprints.filter(
-        (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
-      )
-      // Sub-label: 3 month abbreviations in this quarter (e.g. "Mar · Apr · May")
-      const subLabel = [colStart, addMonths(colStart, 1), addMonths(colStart, 2)]
-        .map(d => fmtMonthShort(d))
-        .join(' · ')
-      cols.push({
-        key: colStart,
-        label: fmtQuarter(colStart),
-        subLabel,
-        startDate: colStart,
-        endDate: colEnd,
-        isProjected: sprintsInCol.length > 0 && sprintsInCol.every((s) => projectedNums.has(s.number)),
-        isOverloaded: sprintsInCol.some((s) => overloadedNums.has(s.number)),
-      })
-      cursor = addMonths(cursor, 3)
     }
   }
 
