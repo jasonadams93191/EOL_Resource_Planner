@@ -20,6 +20,7 @@ import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { mockCapacityProfile } from '@/lib/mock/sample-data'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
 import { buildSprintPlan, buildSprintRoadmap } from '@/lib/planning/sprint-engine'
+import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
 import type { Portfolio, TeamMember } from '@/types/planning'
 
 const START_DATE = '2026-03-09'
@@ -39,6 +40,9 @@ export function GET(request: NextRequest) {
   // Build enhanced roadmap (team-member-based)
   const roadmap = buildSprintRoadmap(projects, TEAM_MEMBERS, START_DATE)
 
+  // Analyze bottlenecks
+  const bottlenecks = analyzeBottlenecks(projects, TEAM_MEMBERS, SKILLS, ROLES, roadmap)
+
   return NextResponse.json({
     projects,
     teamMembers: TEAM_MEMBERS,
@@ -46,6 +50,7 @@ export function GET(request: NextRequest) {
     roles: ROLES,
     sprintPlan,
     roadmap,
+    bottlenecks,
     capacity: mockCapacityProfile,
     source: 'mock-phase1',
   })
@@ -69,12 +74,14 @@ export async function POST(request: NextRequest) {
 
     const roadmap = buildSprintRoadmap(projects, members, startDate)
     const sprintPlan = buildSprintPlan(projects, mockCapacityProfile, startDate)
+    const bottlenecks = analyzeBottlenecks(projects, members, SKILLS, ROLES, roadmap)
 
     return NextResponse.json({
       projects,
       teamMembers: members,
       roadmap,
       sprintPlan,
+      bottlenecks,
       source: 'mock-phase1-recomputed',
     })
   } catch {

@@ -208,8 +208,10 @@ export const mockCallSofiaProject: PlanningProject = {
   portfolio: 'ATI',
   priority: 'high',
   stage: 'in-delivery',
+  planningType: 'phased-program',
   confidence: 'medium',
   effortBand: 'M',
+  owner: 'tm-jusiah',
   epics: [callSofiaEpicPhase1, callSofiaEpicPhase2, callSofiaEpicPhase3],
   sourceRefs: [{ sourceType: 'jira', workspaceId: 'ws-ati', projectKey: 'ATI', label: 'ATI project: Call Sofia' }],
   notes: 'Three-phase delivery. Phase 1 underway. Phases 2 and 3 pending Phase 1 sign-off.',
@@ -450,8 +452,10 @@ export const mockSalesCloudProject: PlanningProject = {
   portfolio: 'ATI',
   priority: 'high',
   stage: 'in-delivery',
+  planningType: 'delivery-project',
   confidence: 'medium',
   effortBand: 'L',
+  owner: 'tm-jusiah',
   epics: [salesCloudEnablement, nextStepNotes, salesTeamRetirement, scDocumentation],
   sourceRefs: [{ sourceType: 'jira', workspaceId: 'ws-ati', projectKey: 'ATI', label: 'ATI project: Sales Cloud' }],
   notes: 'Mix of Jira-backed and manual work items. Documentation epic has no Jira issues yet.',
@@ -658,8 +662,10 @@ export const mockRingCentralProject: PlanningProject = {
   portfolio: 'cross-workspace',
   priority: 'medium',
   stage: 'planned',
+  planningType: 'delivery-project',
   confidence: 'high',
   effortBand: 'M',
+  owner: 'tm-daniel',
   epics: [ringCentralSetup, ringSenseSetup, eolCtiIntegration],
   sourceRefs: [
     { sourceType: 'jira', workspaceId: 'ws-ati', projectKey: 'ATI', label: 'ATI project: RingCentral' },
@@ -678,8 +684,10 @@ export const mockIntake360Project: PlanningProject = {
   portfolio: 'ATI',
   priority: 'medium',
   stage: 'discovery',
+  planningType: 'evaluation-discovery',
   confidence: 'low',
   effortBand: 'L',
+  owner: 'tm-lemuel',
   epics: [
     {
       id: 'pe-intake360-discovery',
@@ -702,6 +710,7 @@ export const mockIntake360Project: PlanningProject = {
           secondarySkill: 'skill-litify',
           domainTag: 'litify',
           urgency: 'normal',
+          manualOverrides: [{ field: 'effortInSprints', originalValue: 0.5, overriddenValue: 0.4, note: 'Adjusted based on PM availability for this sprint' }],
         }),
         workItem('pwi-intake360-002', 'Map existing Intake360 workflows', 'pe-intake360-discovery', {
           primaryRole: ResourceType.DEVELOPER,
@@ -727,8 +736,10 @@ export const mockDocRetrievalProject: PlanningProject = {
   portfolio: 'EOL',
   priority: 'low',
   stage: 'backlog',
+  planningType: 'evaluation-discovery',
   confidence: 'low',
   effortBand: 'M',
+  owner: 'tm-leslie',
   epics: [
     {
       id: 'pe-docret-discovery',
@@ -750,6 +761,7 @@ export const mockDocRetrievalProject: PlanningProject = {
           secondarySkill: 'skill-pm',
           domainTag: 'integration',
           urgency: 'low',
+          manualOverrides: [{ field: 'effortInSprints', originalValue: 0.5, overriddenValue: 1.0, note: 'Extended based on user feedback complexity' }],
         }),
         workItem('pwi-docret-002', 'Design modernized retrieval workflow', 'pe-docret-discovery', {
           primaryRole: ResourceType.DEVELOPER,
@@ -768,6 +780,57 @@ export const mockDocRetrievalProject: PlanningProject = {
   notes: 'Stub project — not yet started. Will be expanded in Wave 2.',
 }
 
+// ── Notes / Tasking / Activity Model Cleanup (Backlog Container) ──
+
+export const mockNotesTaskingProject: PlanningProject = {
+  id: 'pp-notes-tasking',
+  name: 'Notes / Tasking / Activity Model Cleanup',
+  description: 'Backlog of cleanup and standardization tasks for notes, tasking, and activity tracking across EOL and ATI.',
+  status: 'not-started',
+  portfolio: 'EOL',
+  priority: 'low',
+  stage: 'backlog',
+  planningType: 'backlog-container',
+  confidence: 'low',
+  effortBand: 'XL',
+  owner: 'tm-lemuel',
+  epics: [
+    {
+      id: 'pe-notes-cleanup',
+      title: 'Notes & Activity Cleanup',
+      planningProjectId: 'pp-notes-tasking',
+      status: 'not-started',
+      portfolio: 'EOL',
+      estimatedSprints: 2,
+      sourceRefs: [{ sourceType: 'manual', label: 'Manual stub — notes/tasking cleanup backlog' }],
+      notes: 'Backlog container — items require individual scoping before sprint assignment.',
+      workItems: [
+        workItem('pwi-notes-001', 'Audit note field usage across EOL and ATI', 'pe-notes-cleanup', {
+          primaryRole: ResourceType.PM_DEV_HYBRID,
+          effortHours: 8,
+          effortInSprints: 0.2,
+          confidence: 'low',
+          primarySkill: 'skill-reporting',
+          secondarySkill: 'skill-sf-data',
+          domainTag: 'sales-cloud',
+          urgency: 'low',
+        }),
+        workItem('pwi-notes-002', 'Standardize activity timeline fields', 'pe-notes-cleanup', {
+          primaryRole: ResourceType.DEVELOPER,
+          effortHours: 16,
+          effortInSprints: 0.4,
+          confidence: 'low',
+          primarySkill: 'skill-sf-config',
+          domainTag: 'sales-cloud',
+          urgency: 'low',
+        }),
+      ],
+    },
+  ],
+  sourceRefs: [{ sourceType: 'manual', label: 'Manual stub — notes/tasking cleanup backlog' }],
+  notes: 'This is a backlog container. Individual items require scoping before sprint assignment.',
+}
+
 // ── All Planning Projects ─────────────────────────────────────
 // mockPlanningProjects: the 3 active projects (kept for backward compat with existing tests)
 export const mockPlanningProjects: PlanningProject[] = [
@@ -776,11 +839,12 @@ export const mockPlanningProjects: PlanningProject[] = [
   mockRingCentralProject,
 ]
 
-// mockAllPlanningProjects: all 5 projects including future stubs
+// mockAllPlanningProjects: all 6 projects including future stubs and backlog container
 export const mockAllPlanningProjects: PlanningProject[] = [
   mockCallSofiaProject,
   mockSalesCloudProject,
   mockRingCentralProject,
   mockIntake360Project,
   mockDocRetrievalProject,
+  mockNotesTaskingProject,
 ]

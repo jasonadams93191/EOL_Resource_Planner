@@ -19,25 +19,91 @@ const DIMENSION_LABELS: Array<{ key: keyof AssignmentScoreBreakdown; label: stri
   { key: 'priorityUrgencyFit',    label: 'Urgency Fit',          max: 5  },
 ]
 
+/**
+ * Generate a plain-English explanation of why the top candidate ranked highest
+ * and why others scored lower.
+ */
+function explainRanking(
+  top: AssignmentScoreBreakdown,
+  others: AssignmentScoreBreakdown[]
+): string {
+  // Find top 2-3 scoring dimensions for the winner
+  const dims = DIMENSION_LABELS
+    .map((d) => ({ label: d.label, value: top[d.key] as number, max: d.max }))
+    .filter((d) => d.value > 0)
+    .sort((a, b) => b.value / b.max - a.value / a.max)
+    .slice(0, 3)
+
+  const strengths = dims.map((d) => `${d.label} (${d.value}/${d.max})`).join(', ')
+
+  if (others.length === 0) return `Top candidate scored ${top.totalScore}/100. Key strengths: ${strengths}.`
+
+  // Find dimensions where others scored lower than top
+  const gapDims = DIMENSION_LABELS
+    .filter((d) => {
+      const topVal = top[d.key] as number
+      const avgOther = others.reduce((s, o) => s + (o[d.key] as number), 0) / others.length
+      return topVal > avgOther + 2 // meaningful gap
+    })
+    .map((d) => d.label)
+    .slice(0, 2)
+
+  const gapText = gapDims.length > 0
+    ? ` Others ranked lower primarily on: ${gapDims.join(', ')}.`
+    : ''
+
+  return `Top candidate scored ${top.totalScore}/100. Key strengths: ${strengths}.${gapText}`
+}
+
+function PlacementRationale({
+  top,
+  others,
+}: {
+  top: AssignmentScoreBreakdown
+  others: AssignmentScoreBreakdown[]
+}) {
+  const rationale = explainRanking(top, others)
+  return (
+    <div className="rounded bg-indigo-50 border border-indigo-100 px-3 py-2 mt-3">
+      <div className="text-xs font-semibold text-indigo-700 mb-0.5">Placement Rationale</div>
+      <p className="text-xs text-indigo-600">{rationale}</p>
+    </div>
+  )
+}
+
 function ScoreBar({
   value,
   max,
   color,
+  compareValue,
 }: {
   value: number
   max: number
   color: string
+  compareValue?: number
 }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0
+  const comparePct = compareValue != null && max > 0 ? Math.round((compareValue / max) * 100) : null
+  const isWeaker = compareValue != null && value < compareValue
+
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full bg-gray-100">
+      <div className="flex-1 h-1.5 rounded-full bg-gray-100 relative">
         <div
           className={`h-1.5 rounded-full transition-all ${color}`}
           style={{ width: `${pct}%` }}
         />
+        {/* Ghost bar showing top candidate's score for comparison */}
+        {comparePct != null && isWeaker && (
+          <div
+            className="absolute top-0 left-0 h-1.5 rounded-full bg-indigo-200 opacity-40"
+            style={{ width: `${comparePct}%` }}
+          />
+        )}
       </div>
-      <span className="text-xs text-gray-500 w-6 text-right">{value}</span>
+      <span className={`text-xs w-6 text-right ${isWeaker ? 'text-red-400' : 'text-gray-500'}`}>
+        {value}
+      </span>
     </div>
   )
 }
@@ -46,10 +112,12 @@ function CandidateCard({
   breakdown,
   member,
   rank,
+  topBreakdown,
 }: {
   breakdown: AssignmentScoreBreakdown
   member?: TeamMember
   rank: number
+  topBreakdown?: AssignmentScoreBreakdown
 }) {
   const score = breakdown.totalScore
   const scoreColor =
@@ -61,6 +129,25 @@ function CandidateCard({
     'bg-green-500', 'bg-blue-500', 'bg-violet-500',
     'bg-indigo-400', 'bg-teal-400', 'bg-orange-400', 'bg-pink-400',
   ]
+
+  // Find key score drivers (top dimensions relative to max)
+  const keyDrivers = DIMENSION_LABELS
+    .map((d, i) => ({ ...d, value: breakdown[d.key] as number, color: barColors[i % barColors.length] }))
+    .filter((d) => d.value > 0)
+    .sort((a, b) => b.value / b.max - a.value / a.max)
+    .slice(0, 2)
+
+  // Find weaker dimensions vs top candidate
+  const weakerDims = topBreakdown
+    ? DIMENSION_LABELS
+        .filter((d) => {
+          const myVal = breakdown[d.key] as number
+          const topVal = topBreakdown[d.key] as number
+          return myVal < topVal - 2
+        })
+        .map((d) => d.label)
+        .slice(0, 2)
+    : []
 
   return (
     <div className={`rounded-lg border p-3 ${rank === 0 ? 'border-indigo-200 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
@@ -88,11 +175,33 @@ function CandidateCard({
               value={breakdown[dim.key] as number}
               max={dim.max}
               color={barColors[idx % barColors.length]}
+              compareValue={topBreakdown && rank > 0 ? topBreakdown[dim.key] as number : undefined}
             />
             <span className="text-xs text-gray-300 w-6 text-right">/{dim.max}</span>
           </div>
         ))}
       </div>
+
+      {/* Key score drivers (top candidate only) */}
+      {rank === 0 && keyDrivers.length > 0 && (
+        <div className="mt-2 mb-1">
+          <div className="text-xs font-medium text-gray-600 mb-1">Key drivers:</div>
+          <div className="flex flex-wrap gap-1">
+            {keyDrivers.map((d) => (
+              <span key={String(d.key)} className={`text-xs rounded px-1.5 py-0.5 ${d.color === 'bg-green-500' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                {d.label}: {d.value}/{d.max}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Why weaker — for non-top candidates */}
+      {rank > 0 && weakerDims.length > 0 && (
+        <div className="mt-1 text-xs text-gray-400">
+          Weaker on: {weakerDims.join(', ')}
+        </div>
+      )}
 
       {/* Explanation */}
       {breakdown.explanation && (
@@ -113,6 +222,8 @@ export function AssignmentPanel({ candidates, members, topN = 3 }: AssignmentPan
     )
   }
 
+  const topBreakdown = top[0]
+
   return (
     <div className="space-y-3">
       <p className="text-xs text-gray-500">
@@ -126,9 +237,13 @@ export function AssignmentPanel({ candidates, members, topN = 3 }: AssignmentPan
             breakdown={candidate}
             member={member}
             rank={idx}
+            topBreakdown={idx > 0 ? topBreakdown : undefined}
           />
         )
       })}
+      {top.length > 1 && (
+        <PlacementRationale top={topBreakdown} others={top.slice(1)} />
+      )}
       {candidates.length > topN && (
         <p className="text-xs text-gray-400 text-center">
           +{candidates.length - topN} more candidate{candidates.length - topN !== 1 ? 's' : ''}

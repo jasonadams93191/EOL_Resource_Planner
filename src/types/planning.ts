@@ -20,6 +20,50 @@
 
 import type { WorkspaceId, ProjectKey, ResourceType } from './domain'
 
+// ── Planning Type ──────────────────────────────────────────────
+// Classifies the nature of a planning initiative.
+export type PlanningType =
+  | 'delivery-project'
+  | 'phased-program'
+  | 'evaluation-discovery'
+  | 'documentation-support'
+  | 'maintenance-bugbucket'
+  | 'backlog-container'
+
+export const PLANNING_TYPE_LABELS: Record<PlanningType, string> = {
+  'delivery-project': 'Delivery Project',
+  'phased-program': 'Phased Program',
+  'evaluation-discovery': 'Evaluation / Discovery',
+  'documentation-support': 'Documentation / Support',
+  'maintenance-bugbucket': 'Maintenance / Bug Bucket',
+  'backlog-container': 'Backlog Container',
+}
+
+export const PLANNING_TYPE_STYLES: Record<PlanningType, string> = {
+  'delivery-project': 'bg-indigo-100 text-indigo-700',
+  'phased-program': 'bg-blue-100 text-blue-700',
+  'evaluation-discovery': 'bg-amber-100 text-amber-700',
+  'documentation-support': 'bg-teal-100 text-teal-700',
+  'maintenance-bugbucket': 'bg-orange-100 text-orange-700',
+  'backlog-container': 'bg-gray-100 text-gray-500',
+}
+
+// ── Estimate Readiness ─────────────────────────────────────────
+// Signals how ready a work item or epic is for sprint assignment.
+export type EstimateReadiness = 'ready' | 'partial' | 'needs-breakdown'
+
+export const ESTIMATE_READINESS_LABELS: Record<EstimateReadiness, string> = {
+  'ready': 'Ready',
+  'partial': 'Partial',
+  'needs-breakdown': 'Needs Breakdown',
+}
+
+export const ESTIMATE_READINESS_STYLES: Record<EstimateReadiness, string> = {
+  'ready': 'bg-green-100 text-green-700',
+  'partial': 'bg-amber-100 text-amber-700',
+  'needs-breakdown': 'bg-red-100 text-red-700',
+}
+
 // ── Project Stage ──────────────────────────────────────────────
 // Lifecycle stage for initiative-level planning.
 export type ProjectStage =
@@ -185,6 +229,15 @@ export interface PlanningSourceRef {
 export type PlanningStatus = 'not-started' | 'in-progress' | 'done' | 'blocked' | 'on-hold'
 export type PlanningPriority = 'high' | 'medium' | 'low'
 
+// ── Manual Override ────────────────────────────────────────────
+// Tracks when a field has been manually overridden from its engine-computed value.
+export interface ManualOverride {
+  field: 'effortHours' | 'effortInSprints' | 'assigneeId' | 'primarySkill' | 'requiredSkillLevel' | 'sprintNumber'
+  originalValue: string | number
+  overriddenValue: string | number
+  note?: string
+}
+
 // ── Planning Work Item ────────────────────────────────────────
 // The smallest unit of trackable work in the planning layer.
 // Typically corresponds to a Jira issue, but may also be:
@@ -219,6 +272,7 @@ export interface PlanningWorkItem {
   candidateAssigneeIds?: string[]
   dependsOnWorkItemIds?: string[]
   splitRecommended?: boolean
+  manualOverrides?: ManualOverride[]
 }
 
 // ── Planning Epic ─────────────────────────────────────────────
@@ -264,6 +318,7 @@ export interface PlanningProject {
   confidence?: 'low' | 'medium' | 'high'  // estimation confidence at project level
   effortBand?: EffortBand             // rough size of the whole initiative
   owner?: string                      // team member id
+  planningType?: PlanningType         // initiative classification
 }
 
 // ── Effective Priority Helper ──────────────────────────────────

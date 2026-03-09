@@ -1,12 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import type { PlanningProject, PlanningEpic, PlanningWorkItem } from '@/types/planning'
+import type { PlanningProject, PlanningEpic, PlanningWorkItem, TeamMember, Skill } from '@/types/planning'
 import type { WorkItemEstimate } from '@/types/planning'
-import { SKILL_LEVEL_LABELS } from '@/types/planning'
+import {
+  SKILL_LEVEL_LABELS,
+  ESTIMATE_READINESS_LABELS,
+  ESTIMATE_READINESS_STYLES,
+} from '@/types/planning'
+import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
+import { epicReadiness, workItemReadiness } from '@/lib/planning/readiness-engine'
 
 interface ProjectEpicViewProps {
   projects: PlanningProject[]
+  members: TeamMember[]
+  skills: Skill[]
+  roadmap?: SprintRoadmap
   estimates?: Record<string, WorkItemEstimate>
 }
 
@@ -38,8 +47,9 @@ const CONFIDENCE_STYLES: Record<string, string> = {
   high: 'bg-green-50 text-green-700',
 }
 
-function SkillChip({ skillId }: { skillId: string }) {
-  const label = skillId.replace('skill-', '').replace(/-/g, ' ')
+function SkillChip({ skillId, skills }: { skillId: string; skills: Skill[] }) {
+  const skill = skills.find((s) => s.id === skillId)
+  const label = skill?.name ?? skillId.replace('skill-', '').replace(/-/g, ' ')
   return (
     <span className="inline-flex items-center rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700">
       {label}
@@ -47,11 +57,42 @@ function SkillChip({ skillId }: { skillId: string }) {
   )
 }
 
-function WorkItemRow({ item, estimate }: { item: PlanningWorkItem; estimate?: WorkItemEstimate }) {
+function formatEffort(effortInSprints: number): string {
+  if (effortInSprints === 1) return '1 sprint'
+  if (effortInSprints < 1) return `${effortInSprints} sprint`
+  return `${effortInSprints} sprints`
+}
+
+function WorkItemRow({
+  item,
+  members,
+  skills,
+  roadmap,
+  estimate,
+}: {
+  item: PlanningWorkItem
+  members: TeamMember[]
+  skills: Skill[]
+  roadmap?: SprintRoadmap
+  estimate?: WorkItemEstimate
+}) {
+  // Find suggested sprint from roadmap
+  const placement = roadmap?.workItemPlacements.find((p) => p.workItemId === item.id)
+  const suggestedSprint = placement?.sprintNumber
+  const suggestedAssigneeId = placement?.assignedTeamMemberId ?? estimate?.suggestedAssigneeId
+  const suggestedAssignee = suggestedAssigneeId
+    ? members.find((m) => m.id === suggestedAssigneeId)
+    : undefined
+
+  const readiness = workItemReadiness(item)
+  const hasOverrides = (item.manualOverrides?.length ?? 0) > 0
+
   return (
     <div className={`flex items-start gap-2 py-2 px-3 rounded ${item.status === 'done' ? 'opacity-60' : ''} hover:bg-gray-50`}>
       <div className="flex-1 min-w-0">
+        {/* Status + badges row */}
         <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+          <span className="text-xs text-gray-300 font-medium">Work Item</span>
           <span className={`text-xs rounded px-1.5 py-0.5 ${STATUS_STYLES[item.status] ?? 'bg-gray-100 text-gray-600'}`}>
             {STATUS_LABEL[item.status] ?? item.status}
           </span>
@@ -66,16 +107,28 @@ function WorkItemRow({ item, estimate }: { item: PlanningWorkItem; estimate?: Wo
           <span className={`text-xs rounded px-1.5 py-0.5 ${CONFIDENCE_STYLES[item.confidence]}`}>
             {item.confidence} conf
           </span>
+          <span className={`text-xs rounded px-1.5 py-0.5 ${ESTIMATE_READINESS_STYLES[readiness]}`}>
+            {ESTIMATE_READINESS_LABELS[readiness]}
+          </span>
+          {hasOverrides && (
+            <span className="text-xs rounded px-1.5 py-0.5 bg-yellow-100 text-yellow-700 border border-yellow-200" title="Has manual overrides">
+              ⚠ override
+            </span>
+          )}
         </div>
+
+        {/* Title */}
         <p className={`text-sm ${item.status === 'done' ? 'line-through text-gray-400' : 'text-gray-900'}`}>
           {item.title}
         </p>
+
+        {/* Skills + level + domain */}
         <div className="flex items-center gap-1.5 flex-wrap mt-1">
-          {item.primarySkill && <SkillChip skillId={item.primarySkill} />}
-          {item.secondarySkill && <SkillChip skillId={item.secondarySkill} />}
+          {item.primarySkill && <SkillChip skillId={item.primarySkill} skills={skills} />}
+          {item.secondarySkill && <SkillChip skillId={item.secondarySkill} skills={skills} />}
           {item.requiredSkillLevel != null && (
-            <span className="text-xs text-gray-400">
-              lvl {item.requiredSkillLevel} ({SKILL_LEVEL_LABELS[item.requiredSkillLevel]})
+            <span className="text-xs rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">
+              {SKILL_LEVEL_LABELS[item.requiredSkillLevel]} (lvl {item.requiredSkillLevel})
             </span>
           )}
           {item.domainTag && (
@@ -84,24 +137,52 @@ function WorkItemRow({ item, estimate }: { item: PlanningWorkItem; estimate?: Wo
             </span>
           )}
         </div>
+
+        {/* Sprint suggestion + assignee */}
+        {(suggestedSprint != null || suggestedAssignee) && (
+          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+            {suggestedSprint != null && (
+              <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">
+                Sprint {suggestedSprint}
+              </span>
+            )}
+            {suggestedAssignee && (
+              <span className="text-gray-600">
+                → {suggestedAssignee.name}
+              </span>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Right column: effort */}
       <div className="text-right text-xs text-gray-500 whitespace-nowrap shrink-0 mt-0.5">
         <div>{item.effortHours}h</div>
-        {item.effortInSprints && <div>{item.effortInSprints.toFixed(2)} sp</div>}
-        {estimate?.suggestedAssigneeId && (
-          <div className="text-indigo-600 mt-0.5">
-            #{estimate.suggestedAssigneeId.replace('tm-', '')}
-          </div>
+        {item.effortInSprints != null && (
+          <div className="text-indigo-600">{formatEffort(item.effortInSprints)}</div>
         )}
       </div>
     </div>
   )
 }
 
-function EpicPanel({ epic, estimates }: { epic: PlanningEpic; estimates?: Record<string, WorkItemEstimate> }) {
+function EpicPanel({
+  epic,
+  members,
+  skills,
+  roadmap,
+  estimates,
+}: {
+  epic: PlanningEpic
+  members: TeamMember[]
+  skills: Skill[]
+  roadmap?: SprintRoadmap
+  estimates?: Record<string, WorkItemEstimate>
+}) {
   const [expanded, setExpanded] = useState(true)
   const totalHours = epic.workItems.reduce((s, wi) => s + wi.effortHours, 0)
   const doneCount = epic.workItems.filter((wi) => wi.status === 'done').length
+  const readiness = epicReadiness(epic)
 
   return (
     <div className="rounded border border-gray-200 bg-white mb-3">
@@ -110,9 +191,13 @@ function EpicPanel({ epic, estimates }: { epic: PlanningEpic; estimates?: Record
         onClick={() => setExpanded((e) => !e)}
       >
         <span className="text-gray-400 text-xs">{expanded ? '▼' : '▶'}</span>
+        <span className="text-xs text-gray-300 font-medium mr-0.5">Epic</span>
         <span className="font-medium text-sm text-gray-800 flex-1">{epic.title}</span>
         <span className={`text-xs rounded px-1.5 py-0.5 ${STATUS_STYLES[epic.status] ?? 'bg-gray-100 text-gray-600'}`}>
           {STATUS_LABEL[epic.status] ?? epic.status}
+        </span>
+        <span className={`text-xs rounded px-1.5 py-0.5 ml-1 ${ESTIMATE_READINESS_STYLES[readiness]}`}>
+          {ESTIMATE_READINESS_LABELS[readiness]}
         </span>
         <span className="text-xs text-gray-400 ml-2">
           {doneCount}/{epic.workItems.length} · {totalHours}h
@@ -124,6 +209,9 @@ function EpicPanel({ epic, estimates }: { epic: PlanningEpic; estimates?: Record
             <WorkItemRow
               key={item.id}
               item={item}
+              members={members}
+              skills={skills}
+              roadmap={roadmap}
               estimate={estimates?.[item.id]}
             />
           ))}
@@ -133,7 +221,7 @@ function EpicPanel({ epic, estimates }: { epic: PlanningEpic; estimates?: Record
   )
 }
 
-export function ProjectEpicView({ projects, estimates }: ProjectEpicViewProps) {
+export function ProjectEpicView({ projects, members, skills, roadmap, estimates }: ProjectEpicViewProps) {
   const [openProjectId, setOpenProjectId] = useState<string | null>(projects[0]?.id ?? null)
 
   return (
@@ -172,7 +260,14 @@ export function ProjectEpicView({ projects, estimates }: ProjectEpicViewProps) {
             {isOpen && (
               <div className="px-5 py-4">
                 {project.epics.map((epic) => (
-                  <EpicPanel key={epic.id} epic={epic} estimates={estimates} />
+                  <EpicPanel
+                    key={epic.id}
+                    epic={epic}
+                    members={members}
+                    skills={skills}
+                    roadmap={roadmap}
+                    estimates={estimates}
+                  />
                 ))}
               </div>
             )}
