@@ -6,8 +6,10 @@
 //   2. Import snapshot → planning model
 //   3. Apply deterministic enhancement layer (Boss-approved templates)
 //   4. For low-confidence initiatives: run Anthropic LLM (gaps only)
-//   5. Merge AI suggestions into planning model
+//      — skipped when ?llm=false
+//   5. Merge AI suggestions into planning model (dedupe by stable ID)
 //   6. Save AnalysisResult to analysis-store
+//   7. Save EnhancementRunStats to analysis-store
 //
 // READ-ONLY — no Jira writes. LLM only fills gaps.
 // Scope locked to EOL + ATI projects.
@@ -17,14 +19,14 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getAllSnapshots } from '@/lib/jira/snapshot-store'
 import { importPlanningFromJiraSnapshot } from '@/lib/jira/import-snapshot'
-import { applyEnhancements } from '@/lib/planning/enhancements'
+import { applyEnhancementsWithStats } from '@/lib/planning/enhancements'
 import {
   runLLMAnalysis,
   needsLLMEnrichment,
   buildInitiativePack,
   llmSuggestionToWorkItem,
 } from '@/lib/llm/anthropic'
-import { saveAnalysis } from '@/lib/analysis/analysis-store'
+import { saveAnalysis, saveEnhancementStats } from '@/lib/analysis/analysis-store'
 import { getLLMConfig } from '@/lib/config'
 import type { AnalysisResult, InitiativeAnalysis, WorkItemAnalysis, EvidenceRef } from '@/types/analysis'
 import type { PlanningProject } from '@/types/planning'
@@ -41,8 +43,8 @@ function getCache(): Map<string, InitiativeAnalysis> {
   return globalThis.__analysisCache
 }
 
-function cacheKey(projectId: string, latestUpdated: string, model: string): string {
-  return `${projectId}:${latestUpdated}:${model}`
+function cacheKey(projectId: string, latestUpdated: string, model: string, llm: boolean): string {
+  return `${projectId}:${latestUpdated}:${model}:llm=${llm}`
 }
 
 function getLatestUpdated(project: PlanningProject): string {
@@ -77,6 +79,8 @@ function wiToAnalysis(wi: { id: string; title: string; estimatedHours: number; c
 export async function POST(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const forceRecompute = searchParams.get('force') === 'true'
+  // ?llm=false → run deterministic layer only, skip Anthropic
+  const useLLM = searchParams.get('llm') !== 'false'
 
   const snapshots = getAllSnapshots()
   if (!snapshots['ws-eol'] && !snapshots['ws-ati']) {
@@ -95,8 +99,11 @@ export async function POST(request: NextRequest) {
     snapshots['ws-ati']
   )
 
-  // Apply deterministic enhancement layer
-  const enhanced = applyEnhancements(imported)
+  // Apply deterministic enhancement layer (returns stats)
+  const { projects: enhanced, stats: enhancementStats } = applyEnhancementsWithStats(imported)
+
+  // Persist enhancement stats immediately (available even if LLM fails)
+  saveEnhancementStats(enhancementStats)
 
   const analyzedAt = new Date().toISOString()
   const initiatives: InitiativeAnalysis[] = []
@@ -110,7 +117,7 @@ export async function POST(request: NextRequest) {
     if (analyzed >= cfg.maxInitiativesPerRun) break
 
     const latestUpdated = getLatestUpdated(project)
-    const key = cacheKey(project.id, latestUpdated, cfg.model)
+    const key = cacheKey(project.id, latestUpdated, cfg.model, useLLM)
 
     // Use cache if available and not forced
     if (!forceRecompute && cache.has(key)) {
@@ -139,8 +146,8 @@ export async function POST(request: NextRequest) {
         }))
     )
 
-    // Run LLM for gaps only
-    if (cfg.enabled && needsLLMEnrichment(project)) {
+    // Run LLM for gaps only (when enabled and not suppressed by ?llm=false)
+    if (useLLM && cfg.enabled && needsLLMEnrichment(project)) {
       try {
         const pack = buildInitiativePack(project, cfg.maxCharsPerInitiative)
         const suggestions = await runLLMAnalysis(pack)
@@ -148,10 +155,15 @@ export async function POST(request: NextRequest) {
         // Find the first epic with few items to inject suggestions into
         const targetEpic = project.epics.find((e) => e.workItems.length < 3) ?? project.epics[0]
         if (targetEpic) {
-          suggestions.forEach((suggestion, idx) => {
-            const wi = llmSuggestionToWorkItem(suggestion, targetEpic.id, idx)
-            workItemAnalyses.push(wiToAnalysis(wi))
-            tasksSuggested++
+          // Deduplicate by stable ID before adding
+          const existingIds = new Set(workItemAnalyses.map((w) => w.workItemId))
+          suggestions.forEach((suggestion) => {
+            const wi = llmSuggestionToWorkItem(suggestion, targetEpic.id)
+            if (!existingIds.has(wi.id)) {
+              workItemAnalyses.push(wiToAnalysis(wi))
+              existingIds.add(wi.id)
+              tasksSuggested++
+            }
           })
         }
       } catch (err) {
@@ -175,12 +187,20 @@ export async function POST(request: NextRequest) {
   const result: AnalysisResult = { analyzedAt, initiatives }
   saveAnalysis(result)
 
+  // Aggregate enhancement stats totals for the response
+  const totalTasksAdded = enhancementStats.reduce((s, e) => s + e.tasksAdded, 0)
+  const totalFieldsUpdated = enhancementStats.reduce((s, e) => s + e.fieldsUpdated, 0)
+  const totalOverridesPreserved = enhancementStats.reduce((s, e) => s + e.overridesPreserved, 0)
+
   return NextResponse.json({
     success: true,
     analyzedAt,
     initiativesAnalyzed: initiatives.length,
     tasksSuggested,
-    llmEnabled: cfg.enabled,
+    tasksAdded: totalTasksAdded,
+    fieldsUpdated: totalFieldsUpdated,
+    overridesPreserved: totalOverridesPreserved,
+    llmEnabled: cfg.enabled && useLLM,
     model: cfg.model,
     errors: errors.length > 0 ? errors : undefined,
   })

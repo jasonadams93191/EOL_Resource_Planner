@@ -329,12 +329,21 @@ export interface PlanningWorkItem {
   splitRecommended?: boolean
   manualOverrides?: ManualOverride[]
   jira?: JiraIssueData
-  // Enhancement layer flags — set when values were assumed/generated rather than provided
+  // Enhancement layer flags — set when values were assumed/generated rather than provided.
+  // A flag value of `false` means the user has overridden the field and the enhancement
+  // layer must NOT overwrite it. `true` (or absent) means the field may be updated.
   assumedEstimatedHours?: boolean
   assumedSkill?: boolean
+  assumedRequiredSkillLevel?: boolean
+  assumedAssignee?: boolean
+  assumedDescription?: boolean
   assumedPriority?: boolean
   // AI enrichment flag — true when this work item was suggested by the LLM
   aiSuggested?: boolean
+  // Enhancement provenance
+  lastEnhancedAt?: string            // ISO timestamp of last enhancement pass
+  enhancedBy?: 'rules' | 'anthropic' // which engine last touched this item
+  enhancementVersion?: number        // increments on each pass (for cache-busting)
 }
 
 // ── Planning Epic ─────────────────────────────────────────────

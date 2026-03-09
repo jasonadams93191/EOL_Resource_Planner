@@ -15,6 +15,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getLLMConfig } from '@/lib/config'
 import type { PlanningProject, PlanningWorkItem } from '@/types/planning'
 import { ResourceType } from '@/types/domain'
+import { normalizeTitle } from '@/lib/planning/enhancements'
 
 // ── LLM I/O types ────────────────────────────────────────────
 
@@ -229,11 +230,15 @@ export function needsLLMEnrichment(project: PlanningProject): boolean {
 
 export function llmSuggestionToWorkItem(
   suggestion: LLMTaskSuggestion,
-  planningEpicId: string,
-  index: number
+  planningEpicId: string
 ): PlanningWorkItem {
+  // Stable ID: derived from (epicId, normalizedTitle) so re-running LLM for
+  // the same initiative with the same suggestion doesn't create duplicates.
+  const stableId = `pwi-ai-${planningEpicId}-${normalizeTitle(suggestion.title)}`
+  const now = new Date().toISOString()
+
   return {
-    id: `pwi-ai-${planningEpicId}-${index}`,
+    id: stableId,
     title: suggestion.title,
     planningEpicId,
     status: 'not-started',
@@ -250,6 +255,11 @@ export function llmSuggestionToWorkItem(
     aiSuggested: true,
     assumedEstimatedHours: true,
     assumedSkill: !suggestion.requiredSkill,
+    assumedRequiredSkillLevel: !suggestion.requiredSkillLevel,
+    assumedDescription: !suggestion.description,
+    lastEnhancedAt: now,
+    enhancedBy: 'anthropic',
+    enhancementVersion: 1,
     jira: {}, // blank envelope placeholder
   }
 }

@@ -10,6 +10,17 @@
 // "Rules First, LLM Second" — this layer provides coherent
 // baseline estimates and tasks without consuming LLM tokens.
 //
+// Guarantees:
+//   1. STABLE IDs: template work-item IDs are derived from
+//      (epicId, normalizedTitle) — identical across re-runs.
+//   2. OVERRIDE-SAFE: fields whose assumedX=false flag was
+//      cleared by a UI edit are never overwritten.
+//   3. DEDUPE: templates are not injected if a work item
+//      with a matching normalizedTitleKey already exists
+//      in the epic (Jira-imported or previously injected).
+//   4. IN-PLACE: existing template items are updated rather
+//      than recreated, preserving identity across syncs.
+//
 // READ-ONLY source data. No Jira writes.
 // ============================================================
 
@@ -367,17 +378,98 @@ const EPIC_TEMPLATE_MAP: Record<string, string> = {
   'pe-sofia-general':  'documentation',
 }
 
-// ── Work item factory ─────────────────────────────────────────
+// ── Title normalisation (stable ID key) ──────────────────────
+//
+// Produces a URL-slug–style key from a title that is:
+//   - stable across whitespace / punctuation changes
+//   - scoped to (epicId, normalizedKey) for uniqueness
+
+export function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 50)
+}
+
+// ── Stable work-item ID ───────────────────────────────────────
+
+export function templateWorkItemId(epicId: string, title: string): string {
+  return `pwi-tpl-${epicId}-${normalizeTitle(title)}`
+}
+
+// ── Override-safe field merge ─────────────────────────────────
+//
+// Rules:
+//   assumedX === false  → user has overridden this field → skip, increment overridesPreserved
+//   assumedX === true | undefined → enhancement may write → update if value differs
+
+interface MergeResult {
+  item: PlanningWorkItem
+  fieldsUpdated: number
+  overridesPreserved: number
+}
+
+function mergeTemplate(
+  existing: PlanningWorkItem,
+  template: TaskTemplate,
+  now: string
+): MergeResult {
+  const next: PlanningWorkItem = { ...existing }
+  let fieldsUpdated = 0
+  let overridesPreserved = 0
+
+  // estimatedHours
+  if (existing.assumedEstimatedHours !== false) {
+    if (next.estimatedHours !== template.estimatedHours) {
+      next.estimatedHours = template.estimatedHours
+      fieldsUpdated++
+    }
+    next.assumedEstimatedHours = true
+  } else {
+    overridesPreserved++
+  }
+
+  // primarySkill
+  if (existing.assumedSkill !== false) {
+    if (next.primarySkill !== template.requiredSkill) {
+      next.primarySkill = template.requiredSkill
+      fieldsUpdated++
+    }
+    next.assumedSkill = true
+  } else {
+    overridesPreserved++
+  }
+
+  // requiredSkillLevel
+  if (existing.assumedRequiredSkillLevel !== false) {
+    if (next.requiredSkillLevel !== template.requiredSkillLevel) {
+      next.requiredSkillLevel = template.requiredSkillLevel
+      fieldsUpdated++
+    }
+    next.assumedRequiredSkillLevel = true
+  } else {
+    overridesPreserved++
+  }
+
+  next.lastEnhancedAt = now
+  next.enhancedBy = 'rules'
+  next.enhancementVersion = (existing.enhancementVersion ?? 0) + 1
+
+  return { item: next, fieldsUpdated, overridesPreserved }
+}
+
+// ── New work item from template ───────────────────────────────
 
 function templateToWorkItem(
   template: TaskTemplate,
-  planningEpicId: string,
-  idx: number
+  epicId: string,
+  now: string
 ): PlanningWorkItem {
   return {
-    id: `pwi-tpl-${planningEpicId}-${idx}`,
+    id: templateWorkItemId(epicId, template.title),
     title: template.title,
-    planningEpicId,
+    planningEpicId: epicId,
     status: 'not-started',
     sourceRefs: [{ sourceType: 'manual', label: 'Template-generated' }],
     estimatedHours: template.estimatedHours,
@@ -390,79 +482,166 @@ function templateToWorkItem(
     splitRecommended: template.estimatedHours >= 35,
     assumedEstimatedHours: true,
     assumedSkill: true,
+    assumedRequiredSkillLevel: true,
+    lastEnhancedAt: now,
+    enhancedBy: 'rules',
+    enhancementVersion: 1,
     jira: {}, // blank envelope placeholder
   }
 }
 
-// ── Hour distribution helper ──────────────────────────────────
+// ── Injection gate ────────────────────────────────────────────
 
-/**
- * Returns how many template items to inject into an epic so the
- * initiative totals approach the seeded budget.
- * Simple strategy: inject if existing total is < 50% of seeded target.
- */
 function shouldInjectTemplates(
   epic: PlanningEpic,
   existingProjectTotal: number,
   seededTotal: number
 ): boolean {
-  if (epic.workItems.length >= 3) return false // already has enough tasks
+  if (epic.workItems.length >= 3) return false
   if (seededTotal <= 0) return false
   return existingProjectTotal < seededTotal * 0.5
 }
 
-// ── Main enhancement function ─────────────────────────────────
+// ── Public stats types ────────────────────────────────────────
+
+export interface EnhancementRunStats {
+  projectId: string
+  projectName: string
+  tasksAdded: number
+  fieldsUpdated: number
+  overridesPreserved: number
+  lastEnhancedAt: string
+  enhancedBy: 'rules'
+}
+
+export interface EnhancementRunResult {
+  projects: PlanningProject[]
+  stats: EnhancementRunStats[]
+}
+
+// ── Core enhancement implementation ──────────────────────────
+
+function enhanceEpic(
+  epic: PlanningEpic,
+  shouldInject: boolean,
+  now: string
+): { epic: PlanningEpic; tasksAdded: number; fieldsUpdated: number; overridesPreserved: number } {
+  const templateKey = EPIC_TEMPLATE_MAP[epic.id]
+  const templates = templateKey ? (TEMPLATES[templateKey] ?? []) : []
+
+  if (templates.length === 0) {
+    return { epic, tasksAdded: 0, fieldsUpdated: 0, overridesPreserved: 0 }
+  }
+
+  // Build lookup: stable ID → existing work item
+  const existingById = new Map<string, PlanningWorkItem>()
+  epic.workItems.forEach((wi) => existingById.set(wi.id, wi))
+
+  // Build normalized-title set for ALL existing items (Jira + manual + template)
+  // to deduplicate against non-template imports from Jira
+  const existingNormalized = new Set(
+    epic.workItems.map((wi) => normalizeTitle(wi.title))
+  )
+
+  const updatedItems: PlanningWorkItem[] = [...epic.workItems]
+  let tasksAdded = 0
+  let itemsReenhanced = 0    // existing template items that were touched this pass
+  let totalFieldsUpdated = 0
+  let totalOverridesPreserved = 0
+
+  for (const template of templates) {
+    const stableId = templateWorkItemId(epic.id, template.title)
+    const existing = existingById.get(stableId)
+
+    if (existing) {
+      // In-place merge — update assumed fields + always bump lastEnhancedAt/version
+      const { item, fieldsUpdated, overridesPreserved } = mergeTemplate(existing, template, now)
+      const idx = updatedItems.findIndex((wi) => wi.id === stableId)
+      if (idx >= 0) updatedItems[idx] = item
+      totalFieldsUpdated += fieldsUpdated
+      totalOverridesPreserved += overridesPreserved
+      itemsReenhanced++
+    } else if (shouldInject) {
+      // Dedupe: skip if a non-template item already covers this title
+      const normTitle = normalizeTitle(template.title)
+      if (existingNormalized.has(normTitle)) continue
+
+      updatedItems.push(templateToWorkItem(template, epic.id, now))
+      existingNormalized.add(normTitle)
+      tasksAdded++
+    }
+  }
+
+  // Epic is dirty whenever we added items OR re-enhanced existing ones
+  // (mergeTemplate always writes lastEnhancedAt + enhancementVersion)
+  const epicChanged = tasksAdded > 0 || itemsReenhanced > 0
+  return {
+    epic: epicChanged ? { ...epic, workItems: updatedItems } : epic,
+    tasksAdded,
+    fieldsUpdated: totalFieldsUpdated,
+    overridesPreserved: totalOverridesPreserved,
+  }
+}
+
+// ── Main enhancement functions ────────────────────────────────
 
 /**
- * Applies deterministic enhancements to the imported planning model:
- * 1. Injects task templates into under-populated epics
- * 2. Seeds seeded initiative totals into work item estimates
- * 3. Marks all generated fields as "assumed"
- *
- * Mutates the projects array in-place (clones work item arrays to avoid aliasing).
- * Returns the enhanced project list.
+ * Applies deterministic enhancements and returns both the enhanced
+ * project list and per-initiative stats.
  */
-export function applyEnhancements(projects: PlanningProject[]): PlanningProject[] {
-  return projects.map((project) => {
+export function applyEnhancementsWithStats(
+  projects: PlanningProject[]
+): EnhancementRunResult {
+  const now = new Date().toISOString()
+  const stats: EnhancementRunStats[] = []
+
+  const enhanced = projects.map((project) => {
     const seededTotal = INITIATIVE_SEEDED_HOURS[project.id] ?? 0
     const existingTotal = project.epics.reduce(
       (s, e) => s + e.workItems.reduce((se, wi) => se + wi.estimatedHours, 0),
       0
     )
 
+    let projectTasksAdded = 0
+    let projectFieldsUpdated = 0
+    let projectOverridesPreserved = 0
+
     const enhancedEpics = project.epics.map((epic) => {
-      const templateKey = EPIC_TEMPLATE_MAP[epic.id]
-      const templates = templateKey ? TEMPLATES[templateKey] ?? [] : []
-
-      if (!shouldInjectTemplates(epic, existingTotal, seededTotal) || templates.length === 0) {
-        return epic
-      }
-
-      // Inject templates that don't already have near-duplicate titles
-      const existingTitles = new Set(epic.workItems.map((wi) => wi.title.toLowerCase()))
-      const newItems: PlanningWorkItem[] = templates
-        .filter((t) => {
-          // Skip if a similar-title item already exists
-          const tlc = t.title.toLowerCase()
-          return !Array.from(existingTitles).some((existing) =>
-            existing.includes(tlc.split(' ')[2] ?? '') // rough word-match
-          )
-        })
-        .map((t, idx) => templateToWorkItem(t, epic.id, idx))
-
-      if (newItems.length === 0) return epic
-
-      return {
-        ...epic,
-        workItems: [...epic.workItems, ...newItems],
-      }
+      const inject = shouldInjectTemplates(epic, existingTotal, seededTotal)
+      const { epic: nextEpic, tasksAdded, fieldsUpdated, overridesPreserved } =
+        enhanceEpic(epic, inject, now)
+      projectTasksAdded += tasksAdded
+      projectFieldsUpdated += fieldsUpdated
+      projectOverridesPreserved += overridesPreserved
+      return nextEpic
     })
 
-    return { ...project, epics: enhancedEpics }
+    stats.push({
+      projectId: project.id,
+      projectName: project.name,
+      tasksAdded: projectTasksAdded,
+      fieldsUpdated: projectFieldsUpdated,
+      overridesPreserved: projectOverridesPreserved,
+      lastEnhancedAt: now,
+      enhancedBy: 'rules',
+    })
+
+    const changed = enhancedEpics.some((e, i) => e !== project.epics[i])
+    return changed ? { ...project, epics: enhancedEpics } : project
   })
+
+  return { projects: enhanced, stats }
 }
 
-// ── Summary helper ────────────────────────────────────────────
+/**
+ * Convenience wrapper — returns only the enhanced project list.
+ * Use `applyEnhancementsWithStats` when you need per-initiative stats.
+ */
+export function applyEnhancements(projects: PlanningProject[]): PlanningProject[] {
+  return applyEnhancementsWithStats(projects).projects
+}
+
+// ── Summary helper (legacy) ───────────────────────────────────
 
 export interface EnhancementSummary {
   projectId: string
@@ -487,7 +666,10 @@ export function buildEnhancementSummary(
       projectId: project.id,
       projectName: project.name,
       templateItemsAdded: afterCount - beforeCount,
-      totalHours: project.epics.reduce((s, e) => s + e.workItems.reduce((se, wi) => se + wi.estimatedHours, 0), 0),
+      totalHours: project.epics.reduce(
+        (s, e) => s + e.workItems.reduce((se, wi) => se + wi.estimatedHours, 0),
+        0
+      ),
       seededTarget: INITIATIVE_SEEDED_HOURS[project.id] ?? 0,
     }
   })
