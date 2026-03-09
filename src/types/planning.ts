@@ -238,6 +238,18 @@ export interface Sprint {
   capacityHours: number // total team capacity for this sprint
 }
 
+// ── Jira Fields Envelope ───────────────────────────────────────
+// Carries Jira-native metadata for items that originated in Jira.
+// For manual (non-Jira) items these fields act as editable placeholders.
+export interface JiraFields {
+  key?: string          // e.g. "ATI-142"
+  issueType?: string    // "Epic", "Story", "Task", etc.
+  jiraStatus?: string   // raw Jira status string (e.g. "In Progress")
+  reporter?: string     // display name of the Jira reporter
+  labels?: string[]
+  storyPoints?: number
+}
+
 // ── Source Reference ─────────────────────────────────────────
 // Traces a planning item back to its Jira origin, or marks it as manual.
 // Use sourceType:'manual' for work that has no Jira backing.
@@ -304,6 +316,7 @@ export interface PlanningWorkItem {
   dependsOnWorkItemIds?: string[]
   splitRecommended?: boolean
   manualOverrides?: ManualOverride[]
+  jiraFields?: JiraFields
 }
 
 // ── Planning Epic ─────────────────────────────────────────────
@@ -326,6 +339,7 @@ export interface PlanningEpic {
   portfolio: Portfolio // which portfolio this epic belongs to
   estimatedSprints?: number // how many sprints this epic spans
   sequenceOrder?: number              // suggested order within project
+  jiraFields?: JiraFields
 }
 
 // ── Planning Project ──────────────────────────────────────────
@@ -345,11 +359,13 @@ export interface PlanningProject {
   portfolio: Portfolio // derived from source workspaces
   // Initiative-level fields
   priority: PlanningPriority          // required — lives HERE only
+  priorityRank?: number               // unique rank within priority band (1 = highest)
   stage: ProjectStage                 // lifecycle stage
   confidence?: 'low' | 'medium' | 'high'  // estimation confidence at project level
   effortBand?: EffortBand             // rough size of the whole initiative
   owner?: string                      // team member id
   planningType?: PlanningType         // initiative classification
+  jiraFields?: JiraFields
 }
 
 // ── Effective Priority Helper ──────────────────────────────────

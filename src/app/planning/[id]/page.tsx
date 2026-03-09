@@ -114,6 +114,11 @@ function WorkItemRow({
       <td className="px-3 py-2">
         <div className="flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[item.status] ?? 'bg-gray-300'}`} />
+          {item.jiraFields?.key ? (
+            <span className="text-xs rounded bg-blue-100 text-blue-700 px-1 py-0.5 font-mono shrink-0">{item.jiraFields.key}</span>
+          ) : item.sourceRefs.every((r) => r.sourceType === 'manual') ? (
+            <span className="text-xs rounded bg-gray-100 text-gray-400 px-1 py-0.5 font-mono shrink-0" title="Manual item — no Jira key">[manual]</span>
+          ) : null}
           <span className="text-gray-800 font-medium line-clamp-1">{item.title}</span>
           {hasManualOverrides && <span title="Has manual overrides" className="text-amber-500 text-xs">⚠</span>}
         </div>
@@ -286,6 +291,7 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
 
   // Local editable state
   const [priority, setPriority] = useState<PlanningPriority>(project?.priority ?? 'medium')
+  const [priorityRank, setPriorityRank] = useState<number | undefined>(project?.priorityRank)
   const [stage, setStage] = useState<ProjectStage>(project?.stage ?? 'backlog')
   const [planningType, setPlanningType] = useState<PlanningType | undefined>(project?.planningType)
   const [owner, setOwner] = useState<string | undefined>(project?.owner)
@@ -355,6 +361,24 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
             ))}
           </select>
 
+          {/* Priority rank */}
+          <span className="flex items-center gap-1">
+            <span className="text-xs text-gray-400">#</span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={priorityRank ?? ''}
+              onChange={(e) => {
+                const v = parseInt(e.target.value)
+                setPriorityRank(isNaN(v) ? undefined : v)
+              }}
+              placeholder="rank"
+              className="w-12 text-xs border border-gray-200 rounded px-1 py-0.5 text-center"
+              title="Priority rank within band (1 = highest)"
+            />
+          </span>
+
           {/* Stage select */}
           <select
             value={stage}
@@ -386,7 +410,14 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
 
         {/* Name */}
         <div>
-          <h1 className="text-xl font-bold text-gray-900">{project.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-gray-900">{project.name}</h1>
+            {project.jiraFields?.key ? (
+              <span className="text-xs rounded bg-blue-100 text-blue-700 px-2 py-0.5 font-mono">{project.jiraFields.key}</span>
+            ) : project.sourceRefs.every((r) => r.sourceType === 'manual') ? (
+              <span className="text-xs rounded bg-gray-100 text-gray-400 px-2 py-0.5 font-mono" title="No Jira project linked">[manual]</span>
+            ) : null}
+          </div>
           {project.description && (
             <p className="text-sm text-gray-500 mt-1">{project.description}</p>
           )}
@@ -440,6 +471,33 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
         )}
       </div>
 
+      {/* Summary stats bar */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 bg-gray-50 rounded-lg px-4 py-2 border border-gray-100">
+        <span><strong className="text-gray-700">{project.epics.length}</strong> epic{project.epics.length !== 1 ? 's' : ''}</span>
+        <span className="text-gray-300">·</span>
+        <span><strong className="text-gray-700">{allWorkItems.length}</strong> work item{allWorkItems.length !== 1 ? 's' : ''}</span>
+        <span className="text-gray-300">·</span>
+        <span><strong className="text-gray-700">{allWorkItems.reduce((s, wi) => s + (wi.estimatedHours ?? 0), 0)}h</strong> total</span>
+        {projectSprintNumbers.length > 0 && (
+          <>
+            <span className="text-gray-300">·</span>
+            <span>
+              <strong className="text-gray-700">
+                {projectSprintNumbers.length === 1
+                  ? `S${projectSprintNumbers[0]}`
+                  : `S${projectSprintNumbers[0]}–S${projectSprintNumbers[projectSprintNumbers.length - 1]}`}
+              </strong>
+            </span>
+          </>
+        )}
+        {ownerMember && (
+          <>
+            <span className="text-gray-300">·</span>
+            <span>Owner: <strong className="text-gray-700">{ownerMember.name}</strong></span>
+          </>
+        )}
+      </div>
+
       {/* Epics + work items */}
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-gray-700">Epics & Work Items</h2>
@@ -457,28 +515,65 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
         )}
       </div>
 
-      {/* Sprint placement */}
+      {/* Mini roadmap Gantt — epics × sprints */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Sprint Placement</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">Roadmap Slice</h2>
         {projectSprintNumbers.length === 0 ? (
           <p className="text-sm text-gray-400">No work items placed in sprints yet.</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {projectSprintNumbers.map((sprintNum) => {
-              const sprint = roadmap.sprints.find((s) => s.number === sprintNum)
-              const itemsInSprint = projectPlacements.filter((p) => p.sprintNumber === sprintNum).length
-              return (
-                <div key={sprintNum} className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
-                  <div className="text-xs font-semibold text-indigo-700">Sprint {sprintNum}</div>
-                  {sprint && (
-                    <div className="text-xs text-indigo-500">
-                      {sprint.startDate} – {sprint.endDate}
-                    </div>
-                  )}
-                  <div className="text-xs text-indigo-400">{itemsInSprint} item{itemsInSprint !== 1 ? 's' : ''}</div>
-                </div>
-              )
-            })}
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-xs">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="sticky left-0 bg-gray-50 border-b border-r border-gray-200 px-3 py-2 text-left text-gray-600 font-semibold min-w-[160px]">Epic</th>
+                  {projectSprintNumbers.map((sn) => {
+                    const sp = roadmap.sprints.find((s) => s.number === sn)
+                    return (
+                      <th key={sn} className="border-b border-r border-gray-200 px-3 py-2 text-center text-gray-600 font-semibold min-w-[90px]">
+                        <div>S{sn}</div>
+                        {sp && <div className="font-normal text-gray-400">{sp.startDate.slice(5)}</div>}
+                      </th>
+                    )
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {project.epics.map((epic) => {
+                  const epicItemIds = new Set(epic.workItems.map((wi) => wi.id))
+                  const epicReadinessVal = epicReadiness(epic)
+                  const epicRowColor =
+                    epicReadinessVal === 'ready' ? 'bg-green-50' :
+                    epicReadinessVal === 'partial' ? 'bg-amber-50' : 'bg-red-50'
+                  const epicBadgeStyle = ESTIMATE_READINESS_STYLES[epicReadinessVal]
+                  return (
+                    <tr key={epic.id} className={`border-b border-gray-100 ${epicRowColor}`}>
+                      <td className="sticky left-0 border-r border-gray-200 px-3 py-2">
+                        <div className="font-medium text-gray-800 truncate max-w-[150px]" title={epic.title}>{epic.title}</div>
+                        <span className={`text-xs rounded px-1 py-0.5 ${epicBadgeStyle}`}>{ESTIMATE_READINESS_LABELS[epicReadinessVal]}</span>
+                      </td>
+                      {projectSprintNumbers.map((sn) => {
+                        const cellPlacements = projectPlacements.filter(
+                          (p) => p.sprintNumber === sn && epicItemIds.has(p.workItemId)
+                        )
+                        const cellHours = cellPlacements.reduce((s, p) => s + (p.estimatedHours ?? 0), 0)
+                        return (
+                          <td key={sn} className="border-r border-gray-100 px-2 py-2 text-center">
+                            {cellPlacements.length > 0 ? (
+                              <div>
+                                <div className="text-gray-700 font-medium">{cellPlacements.length} item{cellPlacements.length !== 1 ? 's' : ''}</div>
+                                <div className="text-gray-400">{cellHours}h</div>
+                              </div>
+                            ) : (
+                              <span className="text-gray-200">—</span>
+                            )}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

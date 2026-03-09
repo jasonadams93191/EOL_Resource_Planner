@@ -46,9 +46,10 @@ function addDays(isoDate: string, days: number): string {
   return d.toISOString().split('T')[0]
 }
 
-/** Priority sort weight — lower = higher priority. */
-export function priorityWeight(p: PlanningPriority): number {
-  return p === 'high' ? 0 : p === 'medium' ? 1 : 2
+/** Priority sort weight — lower = higher priority. Rank breaks ties within band. */
+export function priorityWeight(p: PlanningPriority, rank?: number): number {
+  const band = p === 'high' ? 0 : p === 'medium' ? 100 : 200
+  return band + (rank != null ? rank : 99)
 }
 
 // ── Sprint generation ─────────────────────────────────────────
@@ -227,7 +228,7 @@ export function buildSprintRoadmap(
   const totalTargetHoursPerSprint = activeMembers.reduce((sum, m) => sum + targetPlannedHours(m), 0)
 
   const sortedProjects = [...projects].sort(
-    (a, b) => priorityWeight(a.priority) - priorityWeight(b.priority)
+    (a, b) => priorityWeight(a.priority, a.priorityRank) - priorityWeight(b.priority, b.priorityRank)
   )
 
   // Internal slot type

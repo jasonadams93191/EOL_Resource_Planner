@@ -132,7 +132,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     primaryRoleId: 'role-ai-automation',
     availableHoursPerSprint: 40,
     utilizationTargetPercent: 75,
-    isActive: true,
+    isActive: false,
     resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-docs', level: 3 },
@@ -160,7 +160,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     primaryRoleId: 'role-qa-docs',
     availableHoursPerSprint: 40,
     utilizationTargetPercent: 70,
-    isActive: true,
+    isActive: false,
     resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-qa',   level: 3 },
@@ -173,7 +173,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     primaryRoleId: 'role-sf-process',
     availableHoursPerSprint: 40,
     utilizationTargetPercent: 75,
-    isActive: true,
+    isActive: false,
     resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-sf-config',   level: 3 },
@@ -187,7 +187,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     primaryRoleId: 'role-revops',
     availableHoursPerSprint: 40,
     utilizationTargetPercent: 70,
-    isActive: true,
+    isActive: false,
     resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-sales-cloud', level: 3 },
@@ -201,7 +201,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     primaryRoleId: 'role-web-marketing',
     availableHoursPerSprint: 40,
     utilizationTargetPercent: 75,
-    isActive: true,
+    isActive: false,
     resourceKind: 'core',
     userSkills: [
       { skillId: 'skill-web', level: 3 },
