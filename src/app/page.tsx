@@ -171,9 +171,11 @@ export default function DashboardPage() {
           {activeMembers.map((m) => {
             const placements = roadmap.workItemPlacements.filter((p) => p.assignedTeamMemberId === m.id)
             const totalHours = placements.reduce((s, p) => s + (p.estimatedHours ?? 0), 0)
-            const capacityHours = m.availableHoursPerSprint * roadmap.totalSprints * (m.utilizationTargetPercent / 100)
-            const pct = capacityHours > 0 ? Math.min(100, Math.round((totalHours / capacityHours) * 100)) : 0
-            const barColor = pct >= 100 ? 'bg-red-400' : pct >= 80 ? 'bg-amber-400' : 'bg-green-500'
+            const targetCapacity = m.availableHoursPerSprint * (m.utilizationTargetPercent / 100) * roadmap.totalSprints
+            const maxCapacity = m.availableHoursPerSprint * roadmap.totalSprints
+            const pct = targetCapacity > 0 ? Math.round((totalHours / targetCapacity) * 100) : 0
+            const barPct = Math.min(100, Math.round((totalHours / maxCapacity) * 100))
+            const barColor = totalHours > maxCapacity ? 'bg-red-400' : pct >= 100 ? 'bg-amber-400' : 'bg-green-500'
             return (
               <Link
                 key={m.id}
@@ -182,9 +184,9 @@ export default function DashboardPage() {
               >
                 <p className="text-xs font-medium text-gray-800 truncate">{m.name.split(' ')[0]}</p>
                 <div className="mt-1.5 h-1.5 rounded-full bg-gray-200">
-                  <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                  <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${barPct}%` }} />
                 </div>
-                <p className="text-xs text-gray-400 mt-1">{pct}% loaded</p>
+                <p className="text-xs text-gray-400 mt-1">{pct}% of target</p>
               </Link>
             )
           })}

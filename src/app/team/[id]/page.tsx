@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
 import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { buildSprintRoadmap } from '@/lib/planning/sprint-engine'
-import { SKILL_LEVEL_LABELS } from '@/types/planning'
+import { SKILL_LEVEL_LABELS, targetPlannedHours } from '@/types/planning'
 import type { TeamMember } from '@/types/planning'
 
 const START_DATE = '2026-03-09'
@@ -135,15 +135,20 @@ export default function TeamMemberPage() {
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Sprint Load</h3>
           <div className="space-y-2">
             {sprintEntries.map(({ sprint, hours }) => {
-              const pct = Math.min(100, Math.round((hours / member.availableHoursPerSprint) * 100))
-              const barColor = pct >= 100 ? 'bg-red-400' : pct >= 80 ? 'bg-yellow-400' : 'bg-green-500'
+              // pct = actual / target × 100; bar caps at available capacity
+              const sprintTarget = targetPlannedHours(member)
+              const pct = sprintTarget > 0 ? Math.round((hours / sprintTarget) * 100) : 0
+              const barPct = Math.min(100, Math.round((hours / member.availableHoursPerSprint) * 100))
+              const barColor = hours > member.availableHoursPerSprint
+                ? 'bg-red-400'
+                : pct >= 100 ? 'bg-amber-400' : 'bg-green-500'
               return (
                 <div key={sprint} className="flex items-center gap-3 text-sm">
                   <span className="text-gray-500 w-16 shrink-0">S{sprint}</span>
                   <div className="flex-1 h-2 rounded-full bg-gray-200">
-                    <div className={`h-2 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                    <div className={`h-2 rounded-full ${barColor}`} style={{ width: `${barPct}%` }} />
                   </div>
-                  <span className="text-gray-600 w-16 text-right shrink-0">{hours}h ({pct}%)</span>
+                  <span className="text-gray-600 w-20 text-right shrink-0">{hours}h ({pct}% of target)</span>
                 </div>
               )
             })}

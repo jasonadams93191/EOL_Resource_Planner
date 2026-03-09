@@ -11,17 +11,25 @@ interface TeamViewProps {
   skills: Skill[]
   onToggleActive?: (memberId: string, isActive: boolean) => void
   linkHref?: (member: TeamMember) => string
+  /** memberId → planned load % of target capacity (actual/target × 100) */
+  memberLoadPct?: Record<string, number>
 }
 
-function CapacityBar({ capacity }: { capacity: number }) {
-  const pct = Math.min(100, Math.round(capacity * 100))
-  const color = capacity >= 0.8 ? 'bg-green-500' : capacity >= 0.5 ? 'bg-yellow-500' : 'bg-red-400'
+/**
+ * pct = actual assigned hours / target capacity hours × 100
+ * Green  < 80% target  |  Amber 80-100% target  |  Red > 100% target (over plan)
+ */
+function CapacityBar({ pct, isActual }: { pct: number; isActual: boolean }) {
+  const barPct = Math.min(100, pct)
+  const color = pct >= 100 ? 'bg-red-400' : pct >= 80 ? 'bg-amber-400' : 'bg-green-500'
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1.5 rounded-full bg-gray-200">
-        <div className={`h-1.5 rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+        <div className={`h-1.5 rounded-full ${color} transition-all`} style={{ width: `${barPct}%` }} />
       </div>
-      <span className="text-xs text-gray-500 w-8 text-right">{pct}%</span>
+      <span className="text-xs text-gray-500 w-12 text-right">
+        {Math.round(pct)}% {isActual ? 'loaded' : 'target'}
+      </span>
     </div>
   )
 }
@@ -48,15 +56,20 @@ function MemberCard({
   skills,
   onToggleActive,
   linkHref,
+  loadPct,
 }: {
   member: TeamMember
   roles: Role[]
   skills: Skill[]
   onToggleActive?: (memberId: string, isActive: boolean) => void
   linkHref?: (member: TeamMember) => string
+  loadPct?: number
 }) {
   const role = roles.find((r) => r.id === member.primaryRoleId)
   const href = linkHref?.(member)
+  // Use actual load % if provided, otherwise fall back to target setting
+  const displayPct = loadPct ?? member.utilizationTargetPercent
+  const isActual = loadPct !== undefined
 
   const cardContent = (
     <div className={`rounded-lg border p-4 ${member.isActive ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'} ${href ? 'hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer' : ''}`}>
@@ -86,8 +99,8 @@ function MemberCard({
 
       {/* Capacity bar */}
       <div className="mb-3">
-        <p className="text-xs text-gray-400 mb-1">Sprint capacity</p>
-        <CapacityBar capacity={member.isActive ? member.utilizationTargetPercent / 100 : 0} />
+        <p className="text-xs text-gray-400 mb-1">{isActual ? 'Planned load' : 'Target allocation'}</p>
+        <CapacityBar pct={member.isActive ? displayPct : 0} isActual={isActual} />
       </div>
 
       {/* Skills */}
@@ -108,7 +121,7 @@ function MemberCard({
   return href ? <Link href={href}>{cardContent}</Link> : cardContent
 }
 
-export function TeamView({ members, roles, skills, onToggleActive, linkHref }: TeamViewProps) {
+export function TeamView({ members, roles, skills, onToggleActive, linkHref, memberLoadPct }: TeamViewProps) {
   const [showInactive, setShowInactive] = useState(false)
 
   const activeMembers = members.filter((m) => m.isActive)
@@ -145,6 +158,7 @@ export function TeamView({ members, roles, skills, onToggleActive, linkHref }: T
             skills={skills}
             onToggleActive={onToggleActive}
             linkHref={linkHref}
+            loadPct={memberLoadPct?.[member.id]}
           />
         ))}
       </div>
