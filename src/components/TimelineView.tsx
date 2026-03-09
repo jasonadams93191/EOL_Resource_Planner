@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { PlanningProject, TeamMember } from '@/types/planning'
 import type { SprintRoadmap, WorkItemPlacement, SprintDetail } from '@/lib/planning/sprint-engine'
 import type { PersonBottleneck } from '@/lib/planning/bottleneck-engine'
@@ -255,6 +256,9 @@ function RowLabel({ row }: { row: TimelineRow }) {
       <div className="flex items-center gap-2 mt-0.5">
         <span className="text-[10px] text-gray-400">{fmtShort(row.startDate)} → {fmtShort(row.endDate)}</span>
         {row.hours != null && <span className="text-[10px] text-gray-400">{row.hours}h</span>}
+        {row.type === 'task' && row.assigneeName && (
+          <span className="text-[10px] text-indigo-500 font-medium">{row.assigneeName}</span>
+        )}
       </div>
     </td>
   )
@@ -273,6 +277,7 @@ function GanttCell({
   colWidth: number
   isTargetCol: boolean
 }) {
+  const router = useRouter()
   const inRange = overlaps(col.startDate, col.endDate, row.startDate, row.endDate)
   const isStart = inRange && col.startDate <= row.startDate && col.endDate >= row.startDate
   const isEnd   = inRange && col.startDate <= row.endDate   && col.endDate >= row.endDate
@@ -307,14 +312,16 @@ function GanttCell({
     <td
       className={`border-b border-gray-100 h-8 p-0 relative ${bgClass}`}
       style={{ minWidth: colWidth, width: colWidth }}
-      title={`${row.title}${row.isProjected ? ' (projected)' : ''}`}
+      title={`${row.title}${row.isProjected ? ' (projected)' : ''} — click to open`}
     >
       <div
+        role="link"
+        onClick={() => router.push(row.href)}
         className={`absolute inset-y-1 left-0 right-0 ${barBg} ${
           isStart ? 'rounded-l-sm ml-1' : ''
         } ${isEnd ? 'rounded-r-sm mr-1' : ''} ${
           !isEnd && !row.isProjected ? 'border-r border-dashed border-white/30' : ''
-        } flex items-center overflow-hidden`}
+        } flex items-center overflow-hidden cursor-pointer hover:brightness-110 active:brightness-90 transition-[filter]`}
       >
         {isStart && (
           <span className={`text-[10px] ${barText} px-1.5 truncate font-medium`}>
