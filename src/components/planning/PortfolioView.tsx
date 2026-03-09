@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import type { Portfolio, PlanningProject, ProjectStage, PlanningPriority, TeamMember } from '@/types/planning'
 import {
   PROJECT_STAGE_LABELS,
@@ -108,7 +109,7 @@ function ProjectSummaryCard({
   const warnings = getInitiativeWarnings(project, members, roadmap)
 
   return (
-    <div className={`rounded-lg border ${colors.border} ${colors.bg} p-4`}>
+    <div className={`rounded-lg border ${colors.border} ${colors.bg} p-4 group-hover:shadow-md group-hover:border-indigo-300 transition-shadow cursor-pointer`}>
       {/* Header row: portfolio + priority + stage */}
       <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
         <span className={`text-xs font-semibold rounded px-1.5 py-0.5 ${colors.badge}`}>
@@ -199,6 +200,10 @@ function ProjectSummaryCard({
         <span>·</span>
         <span>{totalHours}h estimated</span>
       </div>
+
+      <div className="text-xs text-indigo-600 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        View initiative →
+      </div>
     </div>
   )
 }
@@ -253,12 +258,13 @@ export function PortfolioView({ projects, members, roadmap }: PortfolioViewProps
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {portfolioProjects.map((project) => (
-                <ProjectSummaryCard
-                  key={project.id}
-                  project={project}
-                  members={members}
-                  roadmap={roadmap}
-                />
+                <Link key={project.id} href={`/planning/${project.id}`} className="block group">
+                  <ProjectSummaryCard
+                    project={project}
+                    members={members}
+                    roadmap={roadmap}
+                  />
+                </Link>
               ))}
             </div>
           </div>

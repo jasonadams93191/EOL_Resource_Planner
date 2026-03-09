@@ -11,6 +11,9 @@ import { TeamView } from '@/components/planning/TeamView'
 import { SprintRoadmapView } from '@/components/planning/SprintRoadmapView'
 import { ScenarioControls } from '@/components/planning/ScenarioControls'
 import { BottleneckPanel } from '@/components/planning/BottleneckPanel'
+import { ResourceTimelineView } from '@/components/planning/ResourceTimelineView'
+import { InitiativeTimelineView } from '@/components/planning/InitiativeTimelineView'
+import { CapacityChart } from '@/components/planning/CapacityChart'
 import type { TeamMember, PlanningProject } from '@/types/planning'
 import type { BottleneckSummary } from '@/lib/planning/bottleneck-engine'
 
@@ -117,11 +120,33 @@ export default function PlanningPage() {
       )}
 
       {activeTab === 'roadmap' && (
-        <SprintRoadmapView
-          roadmap={roadmap}
-          projects={scenarioProjects}
-          members={scenarioMembers}
-        />
+        <div className="space-y-8">
+          <section>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Resource View</h3>
+            <ResourceTimelineView roadmap={roadmap} projects={scenarioProjects} members={scenarioMembers} />
+          </section>
+          <section>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Initiative Timeline</h3>
+            <InitiativeTimelineView roadmap={roadmap} projects={scenarioProjects} members={scenarioMembers} />
+          </section>
+          <section>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Capacity vs Load</h3>
+            <CapacityChart
+              roadmap={roadmap}
+              totalTeamCapacity={scenarioMembers.filter(m => m.isActive).reduce((s, m) => s + m.sprintCapacity, 0)}
+            />
+          </section>
+          <details className="border border-gray-200 rounded-lg">
+            <summary className="px-4 py-2 text-sm text-gray-500 cursor-pointer hover:bg-gray-50">Legacy Sprint View</summary>
+            <div className="p-2">
+              <SprintRoadmapView
+                roadmap={roadmap}
+                projects={scenarioProjects}
+                members={scenarioMembers}
+              />
+            </div>
+          </details>
+        </div>
       )}
 
       {activeTab === 'bottlenecks' && (
