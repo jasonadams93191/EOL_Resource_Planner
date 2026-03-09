@@ -165,6 +165,7 @@ export interface TeamMember {
   id: string
   name: string
   primaryRoleId: string
+  coversRoles?: string[]             // additional role IDs this member can cover (sprint engine checks all)
   userSkills: UserSkill[]
   availableHoursPerSprint: number    // gross capacity per 2-week sprint (default 40)
   utilizationTargetPercent: number   // soft utilization ceiling 0–100

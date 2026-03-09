@@ -324,9 +324,13 @@ export function buildSprintRoadmap(
         if (slot.estimatedHours > member.availableHoursPerSprint) continue  // single item too big
         if (slot.estimatedHours > remaining) continue  // not enough room
 
-        // Role gate: if the skill has a required role, only consider members in that role.
+        // Role gate: if the skill has a required role, only consider members whose
+        // primaryRoleId or coversRoles includes that role.
         // This enforces "wait for the right role" — no cross-role assignment.
-        if (requiredRoleId && member.primaryRoleId !== requiredRoleId) continue
+        if (requiredRoleId) {
+          const memberRoles = [member.primaryRoleId, ...(member.coversRoles ?? [])]
+          if (!memberRoles.includes(requiredRoleId)) continue
+        }
 
         const skillLevel = slot.primarySkill
           ? (member.userSkills.find((us) => us.skillId === slot.primarySkill)?.level ?? 0)
