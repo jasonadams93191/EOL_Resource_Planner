@@ -133,7 +133,7 @@ function WorkItemRow({
           {item.assumedEstimatedHours && !item.jira?.issueKey && (
             <span className="text-xs text-amber-500" title="Hours are assumed">~h</span>
           )}
-          <span className="text-gray-800 font-medium line-clamp-1">{item.title}</span>
+          <Link href={`/tasks/${item.id}`} className="text-gray-800 font-medium line-clamp-1 hover:text-indigo-600 hover:underline">{item.title}</Link>
           {hasManualOverrides && <span title="Has manual overrides" className="text-amber-500 text-xs">⚠</span>}
         </div>
       </td>
@@ -249,7 +249,7 @@ function EpicPanel({
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 hover:bg-gray-100 text-left transition-colors"
       >
-        <span className="text-sm font-medium text-gray-800">{epic.title}</span>
+        <Link href={`/epics/${epic.id}`} className="text-sm font-medium text-gray-800 hover:text-indigo-600 hover:underline" onClick={(e) => e.stopPropagation()}>{epic.title}</Link>
         <span className={`text-xs rounded px-1.5 py-0.5 ml-1 ${STATUS_DOT[epic.status] ? '' : ''} bg-gray-100 text-gray-500`}>
           {epic.status.replace('-', ' ')}
         </span>

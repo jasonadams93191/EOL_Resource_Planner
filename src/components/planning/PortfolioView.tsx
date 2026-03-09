@@ -16,11 +16,13 @@ import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
 import { epicReadiness } from '@/lib/planning/readiness-engine'
 import { getInitiativeWarnings } from '@/lib/planning/readiness-engine'
 import type { EstimateReadiness } from '@/types/planning'
+import { projectCompletionSprint, getSprintDates, shortDate } from '@/lib/planning/sprint-dates'
 
 interface PortfolioViewProps {
   projects: PlanningProject[]
   members: TeamMember[]
   roadmap?: SprintRoadmap
+  startDate?: string
 }
 
 const PORTFOLIO_COLORS: Record<Portfolio, { bg: string; border: string; badge: string; text: string }> = {
@@ -82,10 +84,12 @@ function ProjectSummaryCard({
   project,
   members,
   roadmap,
+  startDate,
 }: {
   project: PlanningProject
   members: TeamMember[]
   roadmap?: SprintRoadmap
+  startDate?: string
 }) {
   const colors = PORTFOLIO_COLORS[project.portfolio]
   const totalItems = project.epics.reduce((s, e) => s + e.workItems.length, 0)
@@ -98,6 +102,11 @@ function ProjectSummaryCard({
     0
   )
   const pct = totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0
+
+  // Completion date from roadmap
+  const projectWiIds = new Set(project.epics.flatMap((e) => e.workItems.map((wi) => wi.id)))
+  const lastSprint = roadmap ? projectCompletionSprint(project.id, roadmap, projectWiIds) : null
+  const completionEnd = lastSprint && startDate ? getSprintDates(lastSprint, startDate).end : null
 
   // Owner lookup
   const owner = project.owner ? members.find((m) => m.id === project.owner) : undefined
@@ -199,6 +208,12 @@ function ProjectSummaryCard({
         <span>{project.epics.length} epics</span>
         <span>·</span>
         <span>{totalHours}h estimated</span>
+        {completionEnd && (
+          <>
+            <span>·</span>
+            <span className="text-indigo-600">Est. complete: S{lastSprint} ({shortDate(completionEnd)})</span>
+          </>
+        )}
       </div>
 
       <div className="text-xs text-indigo-600 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -208,7 +223,7 @@ function ProjectSummaryCard({
   )
 }
 
-export function PortfolioView({ projects, members, roadmap }: PortfolioViewProps) {
+export function PortfolioView({ projects, members, roadmap, startDate }: PortfolioViewProps) {
   const [stageFilter, setStageFilter] = useState<ProjectStage | 'all'>('all')
 
   const filteredProjects = stageFilter === 'all'
@@ -263,6 +278,7 @@ export function PortfolioView({ projects, members, roadmap }: PortfolioViewProps
                     project={project}
                     members={members}
                     roadmap={roadmap}
+                    startDate={startDate}
                   />
                 </Link>
               ))}

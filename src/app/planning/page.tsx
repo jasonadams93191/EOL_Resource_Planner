@@ -1,35 +1,31 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
 import { buildSprintRoadmap } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
-import { PortfolioView } from '@/components/planning/PortfolioView'
-import { ProjectEpicView } from '@/components/planning/ProjectEpicView'
-import { TeamView } from '@/components/planning/TeamView'
-import { SprintRoadmapView } from '@/components/planning/SprintRoadmapView'
 import { ScenarioControls } from '@/components/planning/ScenarioControls'
 import { BottleneckPanel } from '@/components/planning/BottleneckPanel'
 import { ResourceTimelineView } from '@/components/planning/ResourceTimelineView'
 import { InitiativeTimelineView } from '@/components/planning/InitiativeTimelineView'
 import { CapacityChart } from '@/components/planning/CapacityChart'
+import { SprintRoadmapView } from '@/components/planning/SprintRoadmapView'
 import { DataSourceBanner } from '@/components/planning/DataSourceBanner'
-import type { TeamMember, PlanningProject } from '@/types/planning'
+import { getScenario } from '@/lib/planning/scenario-store'
+import type { TeamMember, PlanningProject, PlanningPriority } from '@/types/planning'
 import type { BottleneckSummary } from '@/lib/planning/bottleneck-engine'
 import type { DataSourceMode } from '@/lib/planning/data-source-mode'
 
 // ── Types ─────────────────────────────────────────────────────
 
-type Tab = 'portfolio' | 'projects' | 'team' | 'roadmap' | 'bottlenecks' | 'scenarios'
+type Tab = 'roadmap' | 'scenarios' | 'bottlenecks'
 
 const TABS: Array<{ id: Tab; label: string }> = [
-  { id: 'portfolio',    label: 'Portfolio' },
-  { id: 'projects',     label: 'Projects' },
-  { id: 'team',         label: 'Team' },
-  { id: 'roadmap',      label: 'Roadmap' },
-  { id: 'bottlenecks',  label: 'Bottlenecks' },
-  { id: 'scenarios',    label: 'Scenarios' },
+  { id: 'roadmap',     label: 'Roadmap' },
+  { id: 'scenarios',   label: 'Scenario Builder' },
+  { id: 'bottlenecks', label: 'Bottlenecks' },
 ]
 
 const START_DATE = '2026-03-09'
@@ -43,15 +39,18 @@ async function loadJiraProjects(): Promise<PlanningProject[]> {
   return Array.isArray(data.projects) ? data.projects : []
 }
 
-// ── Page ──────────────────────────────────────────────────────
+// ── Inner page (needs useSearchParams) ────────────────────────
 
-export default function PlanningPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('portfolio')
+function PlanningPageInner() {
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState<Tab>('roadmap')
   const [dataSourceMode, setDataSourceMode] = useState<DataSourceMode>('seed')
   const [jiraProjects, setJiraProjects] = useState<PlanningProject[] | null>(null)
   const [jiraLoadError, setJiraLoadError] = useState<string | null>(null)
   const [scenarioMembers, setScenarioMembers] = useState<TeamMember[]>(TEAM_MEMBERS)
+  const [scenarioProjects, setScenarioProjects] = useState<PlanningProject[]>(mockAllPlanningProjects)
   const [scenarioStartDate, setScenarioStartDate] = useState(START_DATE)
+  const [lastRecomputedAt, setLastRecomputedAt] = useState<string | null>(null)
   const [roadmap, setRoadmap] = useState(() =>
     buildSprintRoadmap(mockAllPlanningProjects, TEAM_MEMBERS, START_DATE)
   )
@@ -62,11 +61,37 @@ export default function PlanningPage() {
   )
 
   // Recompute engines whenever projects/members change
-  function recompute(projects: PlanningProject[], members: TeamMember[], startDate: string) {
+  const recompute = useCallback((projects: PlanningProject[], members: TeamMember[], startDate: string) => {
     const newRoadmap = buildSprintRoadmap(projects, members, startDate)
     setRoadmap(newRoadmap)
     setBottleneckSummary(analyzeBottlenecks(projects, members, SKILLS, ROLES, newRoadmap))
-  }
+    setLastRecomputedAt(new Date().toLocaleTimeString())
+  }, [])
+
+  // Load scenario from ?scenarioId= URL param on mount
+  useEffect(() => {
+    const scenarioId = searchParams.get('scenarioId')
+    if (!scenarioId) return
+    const scenario = getScenario(scenarioId)
+    if (!scenario) return
+
+    const updatedMembers = TEAM_MEMBERS.map((m) => {
+      const override = scenario.memberOverrides[m.id]
+      if (!override) return m
+      return { ...m, utilizationTargetPercent: override.utilizationTargetPercent, isActive: override.isActive }
+    })
+    const baseProjects = dataSourceMode === 'jiraSnapshot' && jiraProjects ? jiraProjects : mockAllPlanningProjects
+    const updatedProjects = baseProjects.map((p) => {
+      const priorityOverride = scenario.projectPriorities[p.id] as PlanningPriority | undefined
+      return priorityOverride ? { ...p, priority: priorityOverride } : p
+    })
+
+    setScenarioMembers(updatedMembers)
+    setScenarioProjects(updatedProjects)
+    setScenarioStartDate(scenario.sprintStartDate)
+    recompute(updatedProjects, updatedMembers, scenario.sprintStartDate)
+    setActiveTab('scenarios')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Called by DataSourceBanner when mode changes
   const handleModeChange = useCallback(async (mode: DataSourceMode) => {
@@ -74,18 +99,17 @@ export default function PlanningPage() {
     setJiraLoadError(null)
 
     if (mode === 'jiraSnapshot') {
-      // Try to load from /api/planning?source=jiraSnapshot
       const projects = await loadJiraProjects()
       if (projects.length === 0) {
         setJiraProjects(null)
-        // Don't error — snapshot may simply be empty (user hasn't synced yet)
       } else {
         setJiraProjects(projects)
+        setScenarioProjects(projects)
         recompute(projects, scenarioMembers, scenarioStartDate)
       }
     } else {
-      // Revert to seed data
       setJiraProjects(null)
+      setScenarioProjects(mockAllPlanningProjects)
       recompute(mockAllPlanningProjects, scenarioMembers, scenarioStartDate)
     }
   }, [scenarioMembers, scenarioStartDate]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -106,6 +130,7 @@ export default function PlanningPage() {
     startDate: string
   }) {
     setScenarioMembers(members)
+    setScenarioProjects(projects)
     setScenarioStartDate(startDate)
     recompute(projects, members, startDate)
     setActiveTab('roadmap')
@@ -115,9 +140,9 @@ export default function PlanningPage() {
     <div className="space-y-5">
       {/* Page header */}
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">Planning</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Planning Console</h2>
         <p className="text-sm text-gray-500 mt-1">
-          Phase 1 MVP — portfolio view, team model, assignment scoring, sprint roadmap, bottleneck analysis
+          Roadmap, scenario modeling, and bottleneck analysis
         </p>
       </div>
 
@@ -155,35 +180,15 @@ export default function PlanningPage() {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'portfolio' && (
-        <PortfolioView
-          projects={activeProjects}
-          members={scenarioMembers}
-          roadmap={roadmap}
-        />
-      )}
-
-      {activeTab === 'projects' && (
-        <ProjectEpicView
-          projects={activeProjects}
-          members={scenarioMembers}
-          skills={SKILLS}
-          roadmap={roadmap}
-        />
-      )}
-
-      {activeTab === 'team' && (
-        <TeamView
-          members={TEAM_MEMBERS}
-          roles={ROLES}
-          skills={SKILLS}
-        />
-      )}
-
       {activeTab === 'roadmap' && (
         <div className="space-y-8">
           <section>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Resource View</h3>
+            <div className="flex items-center gap-3 mb-3">
+              <h3 className="text-sm font-semibold text-gray-700">Resource View</h3>
+              {lastRecomputedAt && (
+                <span className="text-xs text-gray-400">updated {lastRecomputedAt}</span>
+              )}
+            </div>
             <ResourceTimelineView roadmap={roadmap} projects={activeProjects} members={scenarioMembers} />
           </section>
           <section>
@@ -210,6 +215,16 @@ export default function PlanningPage() {
         </div>
       )}
 
+      {activeTab === 'scenarios' && (
+        <ScenarioControls
+          initialMembers={scenarioMembers}
+          initialProjects={scenarioProjects}
+          startDate={scenarioStartDate}
+          dataMode={dataSourceMode}
+          onRecompute={handleRecompute}
+        />
+      )}
+
       {activeTab === 'bottlenecks' && (
         <BottleneckPanel
           summary={bottleneckSummary}
@@ -218,15 +233,16 @@ export default function PlanningPage() {
           roles={ROLES}
         />
       )}
-
-      {activeTab === 'scenarios' && (
-        <ScenarioControls
-          initialMembers={scenarioMembers}
-          initialProjects={activeProjects}
-          startDate={scenarioStartDate}
-          onRecompute={handleRecompute}
-        />
-      )}
     </div>
+  )
+}
+
+// ── Page (Suspense boundary for useSearchParams) ───────────────
+
+export default function PlanningPage() {
+  return (
+    <Suspense>
+      <PlanningPageInner />
+    </Suspense>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import type { TeamMember, Role, Skill } from '@/types/planning'
 import { SKILL_LEVEL_LABELS } from '@/types/planning'
 
@@ -9,6 +10,7 @@ interface TeamViewProps {
   roles: Role[]
   skills: Skill[]
   onToggleActive?: (memberId: string, isActive: boolean) => void
+  linkHref?: (member: TeamMember) => string
 }
 
 function CapacityBar({ capacity }: { capacity: number }) {
@@ -45,16 +47,19 @@ function MemberCard({
   roles,
   skills,
   onToggleActive,
+  linkHref,
 }: {
   member: TeamMember
   roles: Role[]
   skills: Skill[]
   onToggleActive?: (memberId: string, isActive: boolean) => void
+  linkHref?: (member: TeamMember) => string
 }) {
   const role = roles.find((r) => r.id === member.primaryRoleId)
+  const href = linkHref?.(member)
 
-  return (
-    <div className={`rounded-lg border p-4 ${member.isActive ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'}`}>
+  const cardContent = (
+    <div className={`rounded-lg border p-4 ${member.isActive ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50 opacity-60'} ${href ? 'hover:border-indigo-300 hover:shadow-sm transition-all cursor-pointer' : ''}`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0 flex-1">
           <p className="font-medium text-sm text-gray-900 truncate">{member.name}</p>
@@ -99,9 +104,11 @@ function MemberCard({
       )}
     </div>
   )
+
+  return href ? <Link href={href}>{cardContent}</Link> : cardContent
 }
 
-export function TeamView({ members, roles, skills, onToggleActive }: TeamViewProps) {
+export function TeamView({ members, roles, skills, onToggleActive, linkHref }: TeamViewProps) {
   const [showInactive, setShowInactive] = useState(false)
 
   const activeMembers = members.filter((m) => m.isActive)
@@ -137,6 +144,7 @@ export function TeamView({ members, roles, skills, onToggleActive }: TeamViewPro
             roles={roles}
             skills={skills}
             onToggleActive={onToggleActive}
+            linkHref={linkHref}
           />
         ))}
       </div>

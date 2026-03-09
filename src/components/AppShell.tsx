@@ -3,12 +3,11 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 const navItems = [
-  { href: '/', label: 'Overview', icon: '⊞' },
-  { href: '/projects', label: 'Projects', icon: '◫' },
-  { href: '/planning', label: 'Planning', icon: '◈' },
-  { href: '/timeline', label: 'Timeline', icon: '▦' },
+  { href: '/',          label: 'Overview',  icon: '⊞' },
+  { href: '/planning',  label: 'Planning',  icon: '◈' },
+  { href: '/projects',  label: 'Projects',  icon: '◫' },
+  { href: '/team',      label: 'Team',      icon: '◉' },
   { href: '/scenarios', label: 'Scenarios', icon: '⚖' },
-  { href: '/settings', label: 'Settings', icon: '⚙' },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -25,12 +24,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-gray-500 font-normal">Capacity Planner</span>
           </h1>
           <span className="mt-1 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-            Wave 1 — Mock Data
+            Wave 2 — Live Jira
           </span>
         </div>
         <nav className="flex-1 px-2 py-3 space-y-0.5">
           {navItems.map((item) => {
-            const isActive = pathname === item.href
+            const isActive =
+              item.href === '/'
+                ? pathname === '/'
+                : pathname === item.href || pathname.startsWith(item.href + '/')
             return (
               <Link
                 key={item.href}

@@ -172,7 +172,7 @@ function ResourceView({ roadmap, projects, members }: ResourceTimelineViewProps)
             return (
               <tr key={member.id} className="border-b border-gray-100">
                 <td className="sticky left-0 z-10 bg-white border-r border-gray-200 px-3 py-2">
-                  <div className="font-medium text-gray-800 whitespace-nowrap">{member.name}</div>
+                  <Link href={`/team/${member.id}`} className="font-medium text-gray-800 whitespace-nowrap hover:text-indigo-600 hover:underline">{member.name}</Link>
                   <div className="text-gray-400">{member.availableHoursPerSprint}h · {member.utilizationTargetPercent}% ({target}h target)</div>
                 </td>
                 {Array.from({ length: totalSprints }, (_, i) => i + 1).map((sprintNum) => {
@@ -192,13 +192,14 @@ function ResourceView({ roadmap, projects, members }: ResourceTimelineViewProps)
                             const color = getProjectColor(p.projectIndex)
                             const label = p.title.length > 16 ? p.title.slice(0, 16) + '…' : p.title
                             return (
-                              <div
+                              <Link
                                 key={p.workItemId}
-                                className={`rounded px-1.5 py-0.5 ${color.bg} ${color.text} truncate max-w-[120px]`}
+                                href={`/tasks/${p.workItemId}`}
+                                className={`block rounded px-1.5 py-0.5 ${color.bg} ${color.text} truncate max-w-[120px] hover:opacity-80`}
                                 title={`${p.title} (${p.estimatedHours}h)`}
                               >
                                 {label} · {p.estimatedHours}h
-                              </div>
+                              </Link>
                             )
                           })}
                           <CapacityBar

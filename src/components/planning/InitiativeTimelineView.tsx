@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
 import { priorityWeight } from '@/lib/planning/sprint-engine'
 import { slashDate } from '@/lib/planning/sprint-dates'
@@ -165,7 +166,7 @@ export function InitiativeTimelineView({ roadmap, projects }: InitiativeTimeline
               {/* Project row */}
               <div className="flex items-center hover:bg-gray-50">
                 <div className={`w-48 flex-shrink-0 px-3 py-2 border-r border-gray-200 font-semibold text-xs ${textColor} truncate`}>
-                  {project.name}
+                  <Link href={`/planning/${project.id}`} className="hover:underline">{project.name}</Link>
                 </div>
                 <div className="flex-1 px-2 py-2">
                   {projectRange ? (
@@ -200,7 +201,7 @@ export function InitiativeTimelineView({ roadmap, projects }: InitiativeTimeline
                 return (
                   <div key={epic.id} className="flex items-center bg-gray-50 hover:bg-gray-100 border-t border-gray-100">
                     <div className="w-48 flex-shrink-0 px-3 py-1.5 pl-7 border-r border-gray-200 text-xs text-gray-500 truncate">
-                      {epic.title}
+                      <Link href={`/epics/${epic.id}`} className="hover:text-indigo-600 hover:underline">{epic.title}</Link>
                     </div>
                     <div className="flex-1 px-2 py-1.5">
                       {epicRange ? (

@@ -1,8 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { TeamMember, PlanningProject, PlanningPriority } from '@/types/planning'
 import { TEMP_RESOURCE_TEMPLATES } from '@/lib/planning/acceleration-engine'
+import { nextMonday } from '@/lib/planning/sprint-dates'
+import { listScenarios, getScenario, saveScenario, type SavedScenario } from '@/lib/planning/scenario-store'
+import type { DataSourceMode } from '@/lib/planning/data-source-mode'
+import { TEAM_MEMBERS } from '@/lib/mock/team-data'
+
+const SPRINT_DATE_KEY = 'eol-sprint-start-date'
 
 interface ScenarioState {
   members: TeamMember[]
@@ -14,6 +20,7 @@ interface ScenarioControlsProps {
   initialMembers: TeamMember[]
   initialProjects: PlanningProject[]
   startDate: string
+  dataMode?: DataSourceMode
   onRecompute: (state: ScenarioState) => void
   isComputing?: boolean
 }
@@ -21,13 +28,16 @@ interface ScenarioControlsProps {
 export function ScenarioControls({
   initialMembers,
   initialProjects,
-  startDate,
+  dataMode = 'seed',
   onRecompute,
   isComputing = false,
 }: ScenarioControlsProps) {
   const [members, setMembers] = useState<TeamMember[]>(initialMembers)
   const [projects, setProjects] = useState<PlanningProject[]>(initialProjects)
-  const [scenarioStartDate, setScenarioStartDate] = useState(startDate)
+  const [scenarioStartDate, setScenarioStartDate] = useState<string>(
+    () => (typeof window !== 'undefined' ? localStorage.getItem(SPRINT_DATE_KEY) : null) ?? nextMonday()
+  )
+  const recomputeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function updateCapacity(memberId: string, utilizationTargetPercent: number) {
     setMembers((prev) =>
@@ -54,6 +64,60 @@ export function ScenarioControls({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(TEMP_RESOURCE_TEMPLATES[0].id)
   const [tempSprintWindow, setTempSprintWindow] = useState<number>(4)
 
+  // ── Save / Load ───────────────────────────────────────────────
+  const [scenarioName, setScenarioName] = useState('')
+  const [saveFlash, setSaveFlash] = useState(false)
+  const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => listScenarios())
+
+  function handleSave() {
+    if (!scenarioName.trim()) return
+    const now = new Date().toISOString()
+    const scenario: SavedScenario = {
+      id: `sc-${Date.now()}`,
+      name: scenarioName.trim(),
+      createdAt: now,
+      updatedAt: now,
+      sprintStartDate: scenarioStartDate,
+      dataMode,
+      projectPriorities: Object.fromEntries(projects.map((p) => [p.id, p.priority])),
+      memberOverrides: Object.fromEntries(
+        members
+          .filter((m) => m.resourceKind !== 'temp' && m.resourceKind !== 'external')
+          .map((m) => [m.id, { utilizationTargetPercent: m.utilizationTargetPercent, isActive: m.isActive }])
+      ),
+      tempResources: members
+        .filter((m) => m.resourceKind === 'temp' || m.resourceKind === 'external')
+        .map((m) => ({ templateId: m.id.split('-')[1] ?? m.id, sprintWindow: m.endSprintId ?? 4 })),
+    }
+    saveScenario(scenario)
+    setSavedScenarios(listScenarios())
+    setScenarioName('')
+    setSaveFlash(true)
+    setTimeout(() => setSaveFlash(false), 2000)
+  }
+
+  function handleLoad(id: string) {
+    if (!id) return
+    const scenario = getScenario(id)
+    if (!scenario) return
+
+    const updatedMembers = TEAM_MEMBERS.map((m) => {
+      const override = scenario.memberOverrides[m.id]
+      if (!override) return m
+      return { ...m, utilizationTargetPercent: override.utilizationTargetPercent, isActive: override.isActive }
+    })
+    const updatedProjects = projects.map((p) => {
+      const priority = scenario.projectPriorities[p.id]
+      return priority ? { ...p, priority } : p
+    })
+
+    setMembers(updatedMembers)
+    setProjects(updatedProjects)
+    setScenarioStartDate(scenario.sprintStartDate)
+    if (typeof window !== 'undefined') localStorage.setItem(SPRINT_DATE_KEY, scenario.sprintStartDate)
+    onRecompute({ members: updatedMembers, projects: updatedProjects, startDate: scenario.sprintStartDate })
+  }
+
   function addTempResource() {
     const template = TEMP_RESOURCE_TEMPLATES.find((t) => t.id === selectedTemplateId)
     if (!template) return
@@ -79,7 +143,9 @@ export function ScenarioControls({
   function reset() {
     setMembers(initialMembers)
     setProjects(initialProjects)
-    setScenarioStartDate(startDate)
+    const resetDate = nextMonday()
+    setScenarioStartDate(resetDate)
+    if (typeof window !== 'undefined') localStorage.setItem(SPRINT_DATE_KEY, resetDate)
   }
 
   return (
@@ -95,7 +161,15 @@ export function ScenarioControls({
         <input
           type="date"
           value={scenarioStartDate}
-          onChange={(e) => setScenarioStartDate(e.target.value)}
+          onChange={(e) => {
+            const newDate = e.target.value
+            setScenarioStartDate(newDate)
+            if (typeof window !== 'undefined') localStorage.setItem(SPRINT_DATE_KEY, newDate)
+            if (recomputeTimer.current) clearTimeout(recomputeTimer.current)
+            recomputeTimer.current = setTimeout(() => {
+              onRecompute({ members, projects, startDate: newDate })
+            }, 300)
+          }}
           className="rounded border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
@@ -225,6 +299,45 @@ export function ScenarioControls({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Saved Scenarios */}
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-gray-700">Saved Scenarios</h3>
+        {/* Save */}
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={scenarioName}
+            onChange={(e) => setScenarioName(e.target.value)}
+            placeholder="Scenario name…"
+            className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+          />
+          <button
+            onClick={handleSave}
+            disabled={!scenarioName.trim()}
+            className="shrink-0 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors"
+          >
+            {saveFlash ? 'Saved!' : 'Save'}
+          </button>
+        </div>
+        {/* Load */}
+        {savedScenarios.length > 0 && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 shrink-0">Load:</label>
+            <select
+              defaultValue=""
+              onChange={(e) => { handleLoad(e.target.value); e.target.value = '' }}
+              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="" disabled>Select a scenario…</option>
+              {savedScenarios.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Action buttons */}
