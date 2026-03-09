@@ -21,23 +21,23 @@ import { mockCapacityProfile } from '@/lib/mock/sample-data'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
 import { buildSprintPlan, buildSprintRoadmap } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
-import { getAllSnapshots } from '@/lib/jira/snapshot-store'
+import { getAllSnapshotsAsync } from '@/lib/jira/snapshot-store'
 import { importPlanningFromJiraSnapshot } from '@/lib/jira/import-snapshot'
 import type { Portfolio, TeamMember, PlanningProject } from '@/types/planning'
 
 const START_DATE = '2026-03-09'
 
-export function GET(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const portfolioParam = searchParams.get('portfolio') as Portfolio | null
   const source = searchParams.get('source')
 
-  // Jira snapshot source — import from in-memory store
+  // Jira snapshot source — import from KV or in-memory store
   let baseProjects: PlanningProject[] = mockAllPlanningProjects
   let dataSource = 'mock-phase1'
 
   if (source === 'jiraSnapshot') {
-    const snapshots = getAllSnapshots()
+    const snapshots = await getAllSnapshotsAsync()
     if (snapshots['ws-eol'] || snapshots['ws-ati']) {
       const { projects: imported } = importPlanningFromJiraSnapshot(
         snapshots['ws-eol'],

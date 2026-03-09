@@ -17,7 +17,7 @@
 
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getAllSnapshots } from '@/lib/jira/snapshot-store'
+import { getAllSnapshotsAsync } from '@/lib/jira/snapshot-store'
 import { importPlanningFromJiraSnapshot } from '@/lib/jira/import-snapshot'
 import { applyEnhancementsWithStats } from '@/lib/planning/enhancements'
 import {
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
   // ?llm=false → run deterministic layer only, skip Anthropic
   const useLLM = searchParams.get('llm') !== 'false'
 
-  const snapshots = getAllSnapshots()
+  const snapshots = await getAllSnapshotsAsync()
   if (!snapshots['ws-eol'] && !snapshots['ws-ati']) {
     return NextResponse.json(
       { error: 'No Jira snapshot found. Run POST /api/jira/sync first.' },

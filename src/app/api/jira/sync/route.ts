@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server'
 import { createEolClient, createAtiClient } from '@/lib/jira/client'
-import { saveSnapshot, buildSnapshotCounts } from '@/lib/jira/snapshot-store'
+import { saveSnapshotAsync, buildSnapshotCounts } from '@/lib/jira/snapshot-store'
 
 export async function POST() {
   const results: Record<string, unknown> = {}
@@ -26,7 +26,7 @@ export async function POST() {
     try {
       const issues = await eolClient.fetchProjectIssues()
       const counts = buildSnapshotCounts(issues)
-      saveSnapshot('ws-eol', {
+      await saveSnapshotAsync('ws-eol', {
         issues,
         fetchedAt: new Date().toISOString(),
         counts,
@@ -47,7 +47,7 @@ export async function POST() {
     try {
       const issues = await atiClient.fetchProjectIssues()
       const counts = buildSnapshotCounts(issues)
-      saveSnapshot('ws-ati', {
+      await saveSnapshotAsync('ws-ati', {
         issues,
         fetchedAt: new Date().toISOString(),
         counts,
