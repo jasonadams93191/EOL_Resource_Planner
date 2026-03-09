@@ -67,7 +67,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Sales Cloud — Field/Page Layout Audit & Configuration',
       estimatedHours: HOURS.L,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 3,
       domainTag: 'sales-cloud',
       confidence: 'medium',
@@ -77,7 +77,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Sales Cloud — Opportunity Path & Validation Rules',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 2,
       domainTag: 'sales-cloud',
       confidence: 'medium',
@@ -87,7 +87,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Sales Cloud — Reports & Dashboards for Leadership',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 2,
       domainTag: 'sales-cloud',
       confidence: 'medium',
@@ -97,7 +97,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Sales Cloud — UAT & Training Materials',
       estimatedHours: HOURS.S,
-      requiredSkill: 'documentation',
+      requiredSkill: 'skill-docs',
       requiredSkillLevel: 2,
       domainTag: 'sales-cloud',
       confidence: 'medium',
@@ -111,7 +111,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'NSN — Define Standard Templates & Required Fields',
       estimatedHours: HOURS.S,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 2,
       domainTag: 'sales-cloud',
       confidence: 'high',
@@ -121,7 +121,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'NSN — Build Picklist/Lookup for Next Step Categories',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 2,
       domainTag: 'sales-cloud',
       confidence: 'medium',
@@ -131,7 +131,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'NSN — Cutover: Retire Free-Text Fields',
       estimatedHours: HOURS.S,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 3,
       domainTag: 'sales-cloud',
       confidence: 'medium',
@@ -145,7 +145,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Retirement — Dependency Audit (Reports, Flows, Apex)',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 3,
       domainTag: 'object-retirement',
       confidence: 'high',
@@ -155,7 +155,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Retirement — Data Archive & Migration Plan',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 3,
       domainTag: 'object-retirement',
       confidence: 'medium',
@@ -165,7 +165,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Retirement — Decommission & Validation in Sandbox → Prod',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 3,
       domainTag: 'object-retirement',
       confidence: 'medium',
@@ -179,7 +179,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Integration — Auth/Connection Setup & Credential Vault',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 3,
       domainTag: 'integration',
       confidence: 'high',
@@ -189,7 +189,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Integration — Field Mapping & Transform Logic',
       estimatedHours: HOURS.L,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 3,
       domainTag: 'integration',
       confidence: 'medium',
@@ -199,7 +199,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Integration — Error Handling, Retry Logic & Monitoring',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 3,
       domainTag: 'integration',
       confidence: 'medium',
@@ -209,7 +209,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Integration — QA Test Suite & Go-Live Runbook',
       estimatedHours: HOURS.S,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 2,
       domainTag: 'integration',
       confidence: 'medium',
@@ -223,7 +223,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Voice AI — Vendor Provisioning & Tenant Setup',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 2,
       domainTag: 'telephony',
       confidence: 'high',
@@ -233,7 +233,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Voice AI — Salesforce CTI Connector & Softphone Layout',
       estimatedHours: HOURS.L,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 3,
       domainTag: 'telephony',
       confidence: 'medium',
@@ -243,7 +243,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Voice AI — Call Recording & AI Transcription Configuration',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 2,
       domainTag: 'telephony',
       confidence: 'medium',
@@ -253,7 +253,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Voice AI — UAT with Sales Team & Go-Live',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 2,
       domainTag: 'telephony',
       confidence: 'medium',
@@ -267,7 +267,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Workflow — Process Mapping & Current State Audit',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 2,
       domainTag: 'workflow',
       confidence: 'high',
@@ -277,7 +277,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Workflow — Flow Builder Rebuild (Replace Legacy Rules)',
       estimatedHours: HOURS.XL,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 3,
       domainTag: 'workflow',
       confidence: 'medium',
@@ -287,7 +287,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Workflow — Testing & Rollback Plan',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 2,
       domainTag: 'workflow',
       confidence: 'medium',
@@ -301,7 +301,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Documentation — User Guide & Quick Reference',
       estimatedHours: HOURS.S,
-      requiredSkill: 'documentation',
+      requiredSkill: 'skill-docs',
       requiredSkillLevel: 2,
       domainTag: 'documentation',
       confidence: 'high',
@@ -311,7 +311,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Documentation — Admin Runbook & Configuration Notes',
       estimatedHours: HOURS.S,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 2,
       domainTag: 'documentation',
       confidence: 'high',
@@ -325,7 +325,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Evaluation — Requirements Gathering & Stakeholder Interviews',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 2,
       domainTag: 'discovery',
       confidence: 'high',
@@ -335,7 +335,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Evaluation — POC Build & Feasibility Assessment',
       estimatedHours: HOURS.XL,
-      requiredSkill: 'salesforce-dev',
+      requiredSkill: 'skill-sf-dev',
       requiredSkillLevel: 3,
       domainTag: 'discovery',
       confidence: 'low',
@@ -345,7 +345,7 @@ const TEMPLATES: Record<string, TaskTemplate[]> = {
     {
       title: 'Evaluation — Vendor/Tool Comparison & Recommendation',
       estimatedHours: HOURS.M,
-      requiredSkill: 'salesforce-admin',
+      requiredSkill: 'skill-sf-config',
       requiredSkillLevel: 2,
       domainTag: 'discovery',
       confidence: 'medium',

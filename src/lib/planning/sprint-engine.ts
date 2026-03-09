@@ -278,8 +278,33 @@ export function buildSprintRoadmap(
   const overflowItems: string[] = []
   const allocationsBySprintMember: Record<string, CapacityAllocation> = {}
 
+  // Skill → primary role mapping.
+  // Work items with a primarySkill will only be assigned to members in the
+  // matching role. If no role member has capacity in the current sprint,
+  // the item waits for a later sprint (never cross-assigned).
+  // Skills not in this map (undefined) are unroled — any member may be assigned.
+  const SKILL_PRIMARY_ROLE: Record<string, string> = {
+    'skill-sf-config':    'role-admin',
+    'skill-sf-data':      'role-admin',
+    'skill-sales-cloud':  'role-admin',
+    'skill-litify':       'role-admin',
+    'skill-web':          'role-admin',
+    'skill-sf-dev':       'role-integration-dev',
+    'skill-integration':  'role-integration-dev',
+    'skill-async':        'role-integration-dev',
+    'skill-reporting':    'role-ba',
+    'skill-qa':           'role-ba',
+    'skill-docs':         'role-pm',
+    'skill-pm':           'role-pm',
+    'skill-ai':           'role-architect',
+    'skill-cloud':        'role-architect',
+  }
+
   for (const slot of slots) {
     let placed = false
+
+    // Determine which role should handle this work item (if skill is defined)
+    const requiredRoleId = slot.primarySkill ? SKILL_PRIMARY_ROLE[slot.primarySkill] : undefined
 
     for (let sprintNum = 1; sprintNum <= 52; sprintNum++) {
       const sprintCap = getSprintHours(sprintNum)
@@ -299,11 +324,19 @@ export function buildSprintRoadmap(
         if (slot.estimatedHours > member.availableHoursPerSprint) continue  // single item too big
         if (slot.estimatedHours > remaining) continue  // not enough room
 
-        const hasSkill =
-          !slot.primarySkill ||
-          member.userSkills.some((us) => us.skillId === slot.primarySkill && us.level > 0)
+        // Role gate: if the skill has a required role, only consider members in that role.
+        // This enforces "wait for the right role" — no cross-role assignment.
+        if (requiredRoleId && member.primaryRoleId !== requiredRoleId) continue
 
-        const score = (hasSkill ? 1000 : 0) + remaining
+        const skillLevel = slot.primarySkill
+          ? (member.userSkills.find((us) => us.skillId === slot.primarySkill)?.level ?? 0)
+          : 3  // unroled items treat all members equally
+
+        if (slot.primarySkill && skillLevel === 0) continue  // member lacks the skill entirely
+
+        // Score: prefer higher skill level first (top candidates), then most remaining hours
+        // This ensures higher-skilled members are assigned before less-skilled ones
+        const score = skillLevel * 1000 + remaining
         if (score > bestScore) {
           bestMemberId = member.id
           bestScore = score

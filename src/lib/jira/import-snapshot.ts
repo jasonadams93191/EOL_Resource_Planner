@@ -90,12 +90,13 @@ function rawToWorkItem(
   }
 
   // Infer skill from Jira issue type so sprint engine can route to appropriate members
+  // Skill IDs must match those in src/lib/mock/team-data.ts SKILLS array
   const issueType = f.issuetype?.name?.toLowerCase() ?? ''
   let inferredSkill: string | undefined
   if (issueType.includes('bug') || issueType.includes('sub-task') || issueType.includes('technical')) {
-    inferredSkill = 'salesforce-dev'
+    inferredSkill = 'skill-sf-dev'
   } else if (issueType.includes('story') || issueType.includes('task') || issueType.includes('epic') || issueType.includes('improvement')) {
-    inferredSkill = 'salesforce-admin'
+    inferredSkill = 'skill-sf-config'
   }
 
   return {

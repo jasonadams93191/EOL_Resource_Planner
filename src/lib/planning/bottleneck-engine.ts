@@ -133,17 +133,13 @@ function analyzeRoleBottlenecks(
   roles: Role[],
   roadmap: SprintRoadmap
 ): RoleBottleneck[] {
-  // Role → required skills mapping (from assignment engine affinity)
+  // Role → primary skills mapping (matches SKILL_PRIMARY_ROLE in sprint-engine.ts)
   const ROLE_SKILL_AFFINITY: Record<string, string[]> = {
-    'role-solution-lead':   ['skill-pm', 'skill-litify', 'skill-sf-config'],
-    'role-sf-dev':          ['skill-sf-dev', 'skill-integration', 'skill-async'],
-    'role-sf-builder':      ['skill-sf-config', 'skill-litify', 'skill-reporting'],
-    'role-ai-automation':   ['skill-ai', 'skill-docs', 'skill-qa'],
-    'role-automation-dev':  ['skill-sf-config', 'skill-cloud', 'skill-qa'],
-    'role-qa-docs':         ['skill-qa', 'skill-docs'],
-    'role-sf-process':      ['skill-sf-config', 'skill-sf-data', 'skill-sales-cloud'],
-    'role-revops':          ['skill-sales-cloud', 'skill-reporting'],
-    'role-web-marketing':   ['skill-web'],
+    'role-admin':           ['skill-sf-config', 'skill-sf-data', 'skill-sales-cloud', 'skill-litify', 'skill-web'],
+    'role-pm':              ['skill-pm', 'skill-docs'],
+    'role-ba':              ['skill-reporting', 'skill-qa'],
+    'role-integration-dev': ['skill-sf-dev', 'skill-integration', 'skill-async'],
+    'role-architect':       ['skill-ai', 'skill-cloud'],
   }
 
   const bottlenecks: RoleBottleneck[] = []
