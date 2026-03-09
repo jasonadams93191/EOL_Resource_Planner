@@ -23,26 +23,13 @@ export default function DashboardPage() {
   const [startDate] = useState(START_DATE)
   const [dataMode, setDataMode] = useState<DataSourceMode>('seed')
   const [viewMode, setViewMode] = useState<'plan' | 'timeline'>('plan')
-  const [targetDates, setTargetDates] = useState<Record<string, string>>({})
 
-  // Re-sort projects by target date tightness so the sprint engine schedules
-  // deadline-constrained initiatives first, cascading all others later.
+  // Sort projects by priority for the sprint engine
   const projectsForRoadmap = useMemo(() => {
-    const msPerSprint = 14 * 24 * 60 * 60 * 1000
-    const startMs = new Date(startDate).getTime()
-    return [...projects].sort((a, b) => {
-      const aTarget = targetDates[a.id]
-      const bTarget = targetDates[b.id]
-      if (aTarget && bTarget) {
-        const aTargetSprint = Math.max(1, Math.ceil((new Date(aTarget).getTime() - startMs) / msPerSprint))
-        const bTargetSprint = Math.max(1, Math.ceil((new Date(bTarget).getTime() - startMs) / msPerSprint))
-        return aTargetSprint - bTargetSprint
-      }
-      if (aTarget) return -1
-      if (bTarget) return 1
-      return priorityWeight(a.priority, a.priorityRank) - priorityWeight(b.priority, b.priorityRank)
-    })
-  }, [projects, targetDates, startDate])
+    return [...projects].sort((a, b) =>
+      priorityWeight(a.priority, a.priorityRank) - priorityWeight(b.priority, b.priorityRank)
+    )
+  }, [projects])
 
   const roadmap = useMemo(
     () => buildSprintRoadmap(projectsForRoadmap, members, startDate),
@@ -79,17 +66,7 @@ export default function DashboardPage() {
   function reset() {
     setProjects(mockAllPlanningProjects)
     setMembers(TEAM_MEMBERS)
-    setTargetDates({})
     setDataMode('seed')
-  }
-
-  function setTargetDate(projectId: string, date: string | null) {
-    setTargetDates((prev) => {
-      const next = { ...prev }
-      if (date) next[projectId] = date
-      else delete next[projectId]
-      return next
-    })
   }
 
   const realityScore = useMemo(
@@ -146,8 +123,6 @@ export default function DashboardPage() {
           members={members}
           roadmap={roadmap}
           startDate={startDate}
-          targetDates={targetDates}
-          onSetTargetDate={setTargetDate}
         />
       ) : (
         <TimelineView
@@ -155,7 +130,6 @@ export default function DashboardPage() {
           members={members}
           roadmap={roadmap}
           personBottlenecks={bottlenecks.personBottlenecks}
-          targetDates={targetDates}
         />
       )}
 

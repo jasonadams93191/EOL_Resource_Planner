@@ -213,7 +213,13 @@ export function importPlanningFromJiraSnapshot(
 
   const orphanItems: PlanningWorkItem[] = []
 
+  // Deduplicate by Jira issue key within the same project (EOL-123 ≠ ATI-123)
+  const seenKeys = new Set<string>()
+
   for (const { issue, projectKey } of allIssues) {
+    const dedupKey = `${projectKey}-${issue.key}`
+    if (seenKeys.has(dedupKey)) continue
+    seenKeys.add(dedupKey)
     const f = issue.fields
     const summary = f.summary ?? ''
     const labels = f.labels ?? []

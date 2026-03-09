@@ -23,8 +23,6 @@ interface PortfolioViewProps {
   members: TeamMember[]
   roadmap?: SprintRoadmap
   startDate?: string
-  targetDates?: Record<string, string>
-  onSetTargetDate?: (projectId: string, date: string | null) => void
 }
 
 const PORTFOLIO_COLORS: Record<Portfolio, { bg: string; border: string; badge: string; text: string }> = {
@@ -87,15 +85,11 @@ function ProjectSummaryCard({
   members,
   roadmap,
   startDate,
-  targetDate,
-  onSetTargetDate,
 }: {
   project: PlanningProject
   members: TeamMember[]
   roadmap?: SprintRoadmap
   startDate?: string
-  targetDate?: string
-  onSetTargetDate?: (date: string | null) => void
 }) {
   const colors = PORTFOLIO_COLORS[project.portfolio]
   const totalItems = project.epics.reduce((s, e) => s + e.workItems.length, 0)
@@ -220,39 +214,32 @@ function ProjectSummaryCard({
             <span className="text-indigo-600">Est: S{lastSprint} ({shortDate(completionEnd)})</span>
           </>
         )}
-        {targetDate && completionEnd && (
-          <span className={completionEnd <= targetDate ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
-            {completionEnd <= targetDate ? '✓ On track' : '⚠ Late'}
-          </span>
-        )}
       </div>
 
-      {/* Target date row — stopPropagation prevents the card Link from navigating */}
-      <div
-        className="flex items-center gap-2 mt-2"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <label className="text-[10px] text-gray-400 shrink-0">Target date:</label>
-        <input
-          type="date"
-          value={targetDate ?? ''}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            e.stopPropagation()
-            onSetTargetDate?.(e.target.value || null)
-          }}
-          className="text-[10px] border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#f28c28] cursor-pointer"
-        />
-        {targetDate && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onSetTargetDate?.(null) }}
-            className="text-[10px] text-gray-400 hover:text-red-500"
-            title="Clear target date"
-          >
-            ✕
-          </button>
-        )}
-      </div>
+      {/* Projected date range (display-only, computed from sprint engine) */}
+      {project.computedDateRange && (
+        <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
+          <span>Projected: {shortDate(project.computedDateRange.startDate)} – {shortDate(project.computedDateRange.endDate)}</span>
+        </div>
+      )}
+
+      {/* Team members derived from task assignments */}
+      {project.computedTeamMemberIds && project.computedTeamMemberIds.length > 0 && (
+        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+          <span className="text-[10px] text-gray-400">Team:</span>
+          {project.computedTeamMemberIds.slice(0, 4).map((mid) => {
+            const m = members.find((tm) => tm.id === mid)
+            return (
+              <span key={mid} className="text-[10px] bg-indigo-50 text-indigo-600 rounded-full px-1.5 py-0.5">
+                {m ? m.name.split(' ')[0] : mid}
+              </span>
+            )
+          })}
+          {project.computedTeamMemberIds.length > 4 && (
+            <span className="text-[10px] text-gray-400">+{project.computedTeamMemberIds.length - 4}</span>
+          )}
+        </div>
+      )}
 
       <div className="text-xs text-indigo-600 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
         View initiative →
@@ -261,7 +248,7 @@ function ProjectSummaryCard({
   )
 }
 
-export function PortfolioView({ projects, members, roadmap, startDate, targetDates, onSetTargetDate }: PortfolioViewProps) {
+export function PortfolioView({ projects, members, roadmap, startDate }: PortfolioViewProps) {
   const [stageFilter, setStageFilter] = useState<ProjectStage | 'all'>('all')
 
   const filteredProjects = stageFilter === 'all'
@@ -317,8 +304,6 @@ export function PortfolioView({ projects, members, roadmap, startDate, targetDat
                     members={members}
                     roadmap={roadmap}
                     startDate={startDate}
-                    targetDate={targetDates?.[project.id]}
-                    onSetTargetDate={(date) => onSetTargetDate?.(project.id, date)}
                   />
                 </Link>
               ))}

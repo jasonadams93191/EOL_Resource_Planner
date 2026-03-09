@@ -8,6 +8,7 @@
 import type { PlanningProject, TeamMember, Skill, Role } from '@/types/planning'
 import { targetPlannedHours } from '@/types/planning'
 import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
+import { ROLE_SKILL_DIRECTORY } from '@/lib/planning/role-skill-directory'
 // targetPlannedHours still used by skill bottleneck supply calculation below
 
 // ── Types ─────────────────────────────────────────────────────
@@ -133,14 +134,7 @@ function analyzeRoleBottlenecks(
   roles: Role[],
   roadmap: SprintRoadmap
 ): RoleBottleneck[] {
-  // Role → primary skills mapping (matches SKILL_PRIMARY_ROLE in sprint-engine.ts)
-  const ROLE_SKILL_AFFINITY: Record<string, string[]> = {
-    'role-admin':           ['skill-sf-config', 'skill-sf-data', 'skill-sales-cloud', 'skill-litify', 'skill-web'],
-    'role-pm':              ['skill-pm', 'skill-docs'],
-    'role-ba':              ['skill-reporting', 'skill-qa'],
-    'role-integration-dev': ['skill-sf-dev', 'skill-integration', 'skill-async'],
-    'role-architect':       ['skill-ai', 'skill-cloud'],
-  }
+  // Role → primary skills mapping (from centralized directory)
 
   const bottlenecks: RoleBottleneck[] = []
   const activeMembers = members.filter((m) => m.isActive)
@@ -156,7 +150,7 @@ function analyzeRoleBottlenecks(
   }
 
   for (const role of roles) {
-    const affinitySkills = ROLE_SKILL_AFFINITY[role.id] ?? []
+    const affinitySkills = ROLE_SKILL_DIRECTORY[role.id] ?? []
     if (affinitySkills.length === 0) continue
 
     // Members who have this role

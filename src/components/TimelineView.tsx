@@ -353,10 +353,9 @@ interface TimelineViewProps {
   members: TeamMember[]
   roadmap: SprintRoadmap
   personBottlenecks: PersonBottleneck[]
-  targetDates?: Record<string, string>
 }
 
-export function TimelineView({ projects, members, roadmap, personBottlenecks, targetDates }: TimelineViewProps) {
+export function TimelineView({ projects, members, roadmap, personBottlenecks }: TimelineViewProps) {
   const [filter, setFilter] = useState<FilterLevel>('epics')
   const [searchText, setSearchText] = useState('')
   const [granularity, setGranularity] = useState<Granularity>('monthly')
@@ -464,17 +463,8 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
   const visibleColumns = allColumns.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize)
   const colWidth = COL_WIDTH[granularity]
 
-  // Target date → column key that contains it
-  const targetColByProjectId = useMemo(() => {
-    if (!targetDates) return new Map<string, string>()
-    const map = new Map<string, string>()
-    for (const [projectId, date] of Object.entries(targetDates)) {
-      if (!date) continue
-      const col = allColumns.find((c) => c.startDate <= date && c.endDate >= date)
-      if (col) map.set(projectId, col.key)
-    }
-    return map
-  }, [targetDates, allColumns])
+  // Target date column mapping removed — dates are display-only now
+  const targetColByProjectId = new Map<string, string>()
 
   // ── Build timeline rows ───────────────────────────────────────
   const rows = useMemo<TimelineRow[]>(() => {

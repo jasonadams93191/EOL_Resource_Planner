@@ -368,6 +368,9 @@ export interface PlanningEpic {
   estimatedSprints?: number // how many sprints this epic spans
   sequenceOrder?: number              // suggested order within project
   jira?: JiraIssueData
+  // Computed after roadmap generation — derived from work item placements
+  computedDateRange?: { startDate: string; endDate: string }
+  computedTeamMemberIds?: string[]
 }
 
 // ── Planning Project ──────────────────────────────────────────
@@ -395,6 +398,10 @@ export interface PlanningProject {
   planningType?: PlanningType         // initiative classification
   jira?: JiraIssueData
   blockers?: ProjectBlocker[]         // external constraints (vendor timelines, approvals, dependencies)
+  // Computed after roadmap generation — derived from epic/work item placements
+  computedDateRange?: { startDate: string; endDate: string }
+  computedTeamMemberIds?: string[]
+  targetDate?: string                 // user-set target completion date (ISO), persisted via override store
   /** @deprecated Use blockers instead */
   vendorBlocks?: ProjectBlocker[]
 }

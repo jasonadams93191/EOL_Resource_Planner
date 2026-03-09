@@ -15,6 +15,7 @@
 import type { PlanningProject, Sprint, TeamMember, CapacityAllocation, PlanningPriority } from '@/types/planning'
 import { getEffectivePriority, targetPlannedHours, SPLIT_THRESHOLD_HOURS } from '@/types/planning'
 import type { CapacityProfile } from '@/types/domain'
+import { SKILL_PRIMARY_ROLE } from '@/lib/planning/role-skill-directory'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -377,27 +378,11 @@ export function buildSprintRoadmap(
   const overflowItems: string[] = []
   const allocationsBySprintMember: Record<string, CapacityAllocation> = {}
 
-  // Skill → primary role mapping.
+  // Skill → primary role mapping (imported from centralized directory).
   // Work items with a primarySkill will only be assigned to members in the
   // matching role. If no role member has capacity in the current sprint,
   // the item waits for a later sprint (never cross-assigned).
   // Skills not in this map (undefined) are unroled — any member may be assigned.
-  const SKILL_PRIMARY_ROLE: Record<string, string> = {
-    'skill-sf-config':    'role-admin',
-    'skill-sf-data':      'role-admin',
-    'skill-sales-cloud':  'role-admin',
-    'skill-litify':       'role-admin',
-    'skill-web':          'role-admin',
-    'skill-sf-dev':       'role-integration-dev',
-    'skill-integration':  'role-integration-dev',
-    'skill-async':        'role-integration-dev',
-    'skill-reporting':    'role-ba',
-    'skill-qa':           'role-ba',
-    'skill-docs':         'role-pm',
-    'skill-pm':           'role-pm',
-    'skill-ai':           'role-prompt-engineer',
-    'skill-cloud':        'role-architect',
-  }
 
   // Placement map for O(1) dependency lookups
   const placementMap = new Map<string, WorkItemPlacement>()
@@ -408,6 +393,24 @@ export function buildSprintRoadmap(
   const MAX_INITIATIVES_PER_MEMBER = 3  // max distinct initiatives per person per sprint
   const MAX_EPICS_PER_MEMBER = 3        // max distinct epics per person per sprint
   const MAX_TASKS_PER_MEMBER = 5        // max tasks per person per sprint
+
+  // ── Sprint-level global limits ──
+  // Caps total concurrent work across all team members within a single sprint.
+  // Keeps the team focused and prevents too many open work fronts.
+  const MAX_EPICS_PER_SPRINT = activeMembers.length * 2   // e.g. 6 members → 12 epics max
+  const MAX_TASKS_PER_SPRINT = activeMembers.length * 5   // e.g. 6 members → 30 tasks max
+
+  // Sprint-level tracking
+  const sprintEpics: Record<number, Set<string>> = {}
+  const sprintTaskCount: Record<number, number> = {}
+
+  const getSprintEpics = (sprintNum: number): Set<string> => {
+    if (!sprintEpics[sprintNum]) sprintEpics[sprintNum] = new Set()
+    return sprintEpics[sprintNum]
+  }
+  const getSprintTaskCount = (sprintNum: number): number => {
+    return sprintTaskCount[sprintNum] ?? 0
+  }
 
   // Tracking structures: key = `sprint:memberId`
   const memberInitiativesBySprint: Record<string, Set<string>> = {}
@@ -450,6 +453,11 @@ export function buildSprintRoadmap(
     const requiredRoleId = slot.primarySkill ? SKILL_PRIMARY_ROLE[slot.primarySkill] : undefined
 
     for (let sprintNum = earliestSprint; sprintNum <= 52; sprintNum++) {
+      // Sprint-level limits: skip this sprint if it's already at capacity
+      const sprintEpicSet = getSprintEpics(sprintNum)
+      if (!sprintEpicSet.has(slot.epicId) && sprintEpicSet.size >= MAX_EPICS_PER_SPRINT) continue
+      if (getSprintTaskCount(sprintNum) >= MAX_TASKS_PER_SPRINT) continue
+
       const sprintCap = getSprintHours(sprintNum)
 
       let bestMemberId: string | undefined
@@ -507,6 +515,10 @@ export function buildSprintRoadmap(
         getInitiatives(sprintNum, bestMemberId).add(slot.projectId)
         getEpics(sprintNum, bestMemberId).add(slot.epicId)
         memberTaskCountBySprint[`${sprintNum}:${bestMemberId}`] = getTaskCount(sprintNum, bestMemberId) + 1
+
+        // Record sprint-level counts
+        getSprintEpics(sprintNum).add(slot.epicId)
+        sprintTaskCount[sprintNum] = getSprintTaskCount(sprintNum) + 1
 
         const placement: WorkItemPlacement = {
           workItemId: slot.workItemId,

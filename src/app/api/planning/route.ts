@@ -26,8 +26,52 @@ import { getAllSnapshotsAsync } from '@/lib/jira/snapshot-store'
 import { importPlanningFromJiraSnapshot } from '@/lib/jira/import-snapshot'
 import { getAllOverridesAsync, applyOverrides } from '@/lib/planning/override-store'
 import type { Portfolio, TeamMember, PlanningProject } from '@/types/planning'
+import type { WorkItemPlacement } from '@/lib/planning/sprint-engine'
 
 const START_DATE = '2026-03-09'
+
+/**
+ * Compute date ranges and team composition by rolling up work item placements
+ * to epic level, then epic level to project level. Mutates projects in place.
+ */
+function applyDateAndTeamRollUp(projects: PlanningProject[], placements: WorkItemPlacement[]): void {
+  const placementMap = new Map(placements.map(p => [p.workItemId, p]))
+
+  for (const project of projects) {
+    let projectStart: string | undefined
+    let projectEnd: string | undefined
+    const projectTeam = new Set<string>()
+
+    for (const epic of project.epics) {
+      let epicStart: string | undefined
+      let epicEnd: string | undefined
+      const epicTeam = new Set<string>()
+
+      for (const wi of epic.workItems) {
+        const p = placementMap.get(wi.id)
+        if (!p) continue
+        if (p.projectedStartDate && (!epicStart || p.projectedStartDate < epicStart))
+          epicStart = p.projectedStartDate
+        if (p.projectedEndDate && (!epicEnd || p.projectedEndDate > epicEnd))
+          epicEnd = p.projectedEndDate
+        if (p.assignedTeamMemberId) epicTeam.add(p.assignedTeamMemberId)
+      }
+
+      if (epicStart && epicEnd)
+        epic.computedDateRange = { startDate: epicStart, endDate: epicEnd }
+      epic.computedTeamMemberIds = [...epicTeam]
+
+      // Roll up to project
+      if (epicStart && (!projectStart || epicStart < projectStart)) projectStart = epicStart
+      if (epicEnd && (!projectEnd || epicEnd > projectEnd)) projectEnd = epicEnd
+      epicTeam.forEach(m => projectTeam.add(m))
+    }
+
+    if (projectStart && projectEnd)
+      project.computedDateRange = { startDate: projectStart, endDate: projectEnd }
+    project.computedTeamMemberIds = [...projectTeam]
+  }
+}
 
 /**
  * Roll up statuses: all tasks done → epic done, all epics done → initiative complete.
@@ -92,6 +136,13 @@ export async function GET(request: NextRequest) {
   // Roll up statuses: tasks → epics → initiatives
   applyStatusRollUp(baseProjects)
 
+  // Hide done initiatives and orphan/unclassified projects
+  baseProjects = baseProjects.filter((p) =>
+    p.stage !== 'complete' &&
+    !p.id.startsWith('auto-pe-orphan') &&
+    !p.name.includes('Unclassified')
+  )
+
   // Filter by portfolio if requested
   const projects = portfolioParam
     ? baseProjects.filter((p) => p.portfolio === portfolioParam)
@@ -102,6 +153,9 @@ export async function GET(request: NextRequest) {
 
   // Build enhanced roadmap (team-member-based)
   const roadmap = buildSprintRoadmap(projects, TEAM_MEMBERS, START_DATE)
+
+  // Roll up dates and team composition from placements to epics/projects
+  applyDateAndTeamRollUp(projects, roadmap.workItemPlacements)
 
   // Analyze bottlenecks
   const bottlenecks = analyzeBottlenecks(projects, TEAM_MEMBERS, SKILLS, ROLES, roadmap)
@@ -160,6 +214,7 @@ export async function POST(request: NextRequest) {
       : allProjects
 
     const roadmap = buildSprintRoadmap(projects, members, startDate)
+    applyDateAndTeamRollUp(projects, roadmap.workItemPlacements)
     const sprintPlan = buildSprintPlan(projects, mockCapacityProfile, startDate)
     const bottlenecks = analyzeBottlenecks(projects, members, SKILLS, ROLES, roadmap)
     const baseline = computeBaselineTimeline(projects)

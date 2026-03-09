@@ -23,6 +23,7 @@ export interface PlanningOverride {
   // project fields
   owner?: string | null
   confidence?: string
+  targetDate?: string | null
 }
 
 export interface OverrideRecord {

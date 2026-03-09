@@ -30,19 +30,8 @@ export interface AssignmentContext {
 }
 
 // ── Role → Skill mapping ──────────────────────────────────────
-// Maps role ids to the skills that are typical for that role.
-// Used for role-fit scoring when primarySkill is not set on the item.
-const ROLE_SKILL_AFFINITY: Record<string, string[]> = {
-  'role-solution-lead':   ['skill-pm', 'skill-litify', 'skill-sf-config'],
-  'role-sf-dev':          ['skill-sf-dev', 'skill-integration', 'skill-async'],
-  'role-sf-builder':      ['skill-sf-config', 'skill-litify', 'skill-reporting'],
-  'role-ai-automation':   ['skill-ai', 'skill-docs', 'skill-qa'],
-  'role-automation-dev':  ['skill-sf-config', 'skill-cloud', 'skill-qa'],
-  'role-qa-docs':         ['skill-qa', 'skill-docs'],
-  'role-sf-process':      ['skill-sf-config', 'skill-sf-data', 'skill-sales-cloud'],
-  'role-revops':          ['skill-sales-cloud', 'skill-reporting'],
-  'role-web-marketing':   ['skill-web'],
-}
+// Centralized directory — single source of truth for role↔skill mappings
+import { ROLE_SKILL_DIRECTORY } from '@/lib/planning/role-skill-directory'
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -94,7 +83,7 @@ export function scoreCandidate(
     }
   } else {
     // No skill specified — partial credit based on role affinity
-    const affinitySkills = ROLE_SKILL_AFFINITY[member.primaryRoleId] ?? []
+    const affinitySkills = ROLE_SKILL_DIRECTORY[member.primaryRoleId] ?? []
     if (affinitySkills.length > 0) {
       skillMatch = 20
       reasons.push(`Role affinity match (no skill constraint)`)
@@ -140,7 +129,7 @@ export function scoreCandidate(
 
   // 4. Role Fit (0–10)
   let roleFit = 0
-  const affinitySkills = ROLE_SKILL_AFFINITY[member.primaryRoleId] ?? []
+  const affinitySkills = ROLE_SKILL_DIRECTORY[member.primaryRoleId] ?? []
   if (item.primarySkill && affinitySkills.includes(item.primarySkill)) {
     roleFit = 10
     reasons.push(`Role aligns with required skill`)

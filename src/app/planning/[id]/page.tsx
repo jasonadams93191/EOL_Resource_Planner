@@ -769,6 +769,46 @@ export default function InitiativePage() {
         )}
       </div>
 
+      {/* Projected timeline and team (display-only — computed from sprint engine) */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          {project.computedDateRange && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500">Projected:</span>
+              <strong className="text-gray-700">
+                {new Date(project.computedDateRange.startDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
+                {' – '}
+                {new Date(project.computedDateRange.endDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
+              </strong>
+            </div>
+          )}
+          <div className="text-xs text-gray-400">
+            Adjust via: scope, resources, or priority
+          </div>
+        </div>
+
+        {/* Team members derived from task assignments */}
+        {project.computedTeamMemberIds && project.computedTeamMemberIds.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">Team:</span>
+            <div className="flex flex-wrap gap-1.5">
+              {project.computedTeamMemberIds.map((memberId) => {
+                const member = TEAM_MEMBERS.find((m) => m.id === memberId)
+                return (
+                  <Link
+                    key={memberId}
+                    href={`/team/${memberId}`}
+                    className="text-xs bg-indigo-50 text-indigo-700 rounded-full px-2 py-0.5 hover:bg-indigo-100 transition-colors"
+                  >
+                    {member?.name ?? memberId}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Epics + work items */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
-import { SKILLS } from '@/lib/mock/team-data'
+import { SKILLS, TEAM_MEMBERS } from '@/lib/mock/team-data'
 import { getSourceKind, SOURCE_BADGE_STYLES, SOURCE_BADGE_LABELS } from '@/lib/planning/source-badge'
 import type { PlanningEpic, PlanningProject, PlanningWorkItem } from '@/types/planning'
 import { ResourceType } from '@/types/domain'
@@ -194,6 +194,38 @@ export default function EpicRecordPage() {
         </dl>
         {epic.notes && (
           <p className="text-sm text-gray-500 mt-3">{epic.notes}</p>
+        )}
+
+        {/* Projected date range and team (display-only) */}
+        {epic.computedDateRange && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
+            <span>
+              Projected: <strong className="text-gray-700">
+                {new Date(epic.computedDateRange.startDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
+                {' – '}
+                {new Date(epic.computedDateRange.endDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
+              </strong>
+            </span>
+          </div>
+        )}
+        {epic.computedTeamMemberIds && epic.computedTeamMemberIds.length > 0 && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-gray-500">Team:</span>
+            <div className="flex flex-wrap gap-1.5">
+              {epic.computedTeamMemberIds.map((memberId) => {
+                const member = TEAM_MEMBERS.find((m) => m.id === memberId)
+                return (
+                  <Link
+                    key={memberId}
+                    href={`/team/${memberId}`}
+                    className="text-xs bg-indigo-50 text-indigo-700 rounded-full px-2 py-0.5 hover:bg-indigo-100 transition-colors"
+                  >
+                    {member?.name ?? memberId}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
         )}
       </div>
 
