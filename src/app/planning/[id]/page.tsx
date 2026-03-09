@@ -22,7 +22,6 @@ import type {
   PlanningPriority,
   ProjectStage,
   PlanningType,
-  ManualOverride,
   PlanningWorkItem,
 } from '@/types/planning'
 
@@ -164,7 +163,7 @@ function WorkItemRow({
                 onOverrideChange({ estimatedHours: val })
               }
             }}
-            className={`w-16 border rounded px-1 py-0.5 text-xs ${effortOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+            className={`w-16 border rounded px-1 py-0.5 text-xs bg-white text-gray-800 ${effortOverridden ? 'border-amber-400' : 'border-gray-200'}`}
           />
           <span className="text-gray-400 text-xs">h</span>
         </div>
@@ -174,7 +173,7 @@ function WorkItemRow({
         <select
           value={localOverride.primarySkill ?? item.primarySkill ?? ''}
           onChange={(e) => onOverrideChange({ primarySkill: e.target.value || undefined })}
-          className={`text-xs border rounded px-1 py-0.5 max-w-[120px] ${skillOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+          className={`text-xs border rounded px-1 py-0.5 max-w-[120px] bg-white text-gray-800 ${skillOverridden ? 'border-amber-400' : 'border-gray-200'}`}
         >
           <option value="">— None —</option>
           {SKILLS.map((s) => (
@@ -190,7 +189,7 @@ function WorkItemRow({
             const val = e.target.value === '' ? undefined : Number(e.target.value)
             onOverrideChange({ requiredSkillLevel: val })
           }}
-          className={`text-xs border rounded px-1 py-0.5 w-14 ${levelOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+          className={`text-xs border rounded px-1 py-0.5 w-14 bg-white text-gray-800 ${levelOverridden ? 'border-amber-400' : 'border-gray-200'}`}
         >
           <option value="">—</option>
           {[0, 1, 2, 3, 4].map((l) => (
@@ -203,7 +202,7 @@ function WorkItemRow({
         <select
           value={localOverride.assigneeId ?? assignedMemberId ?? ''}
           onChange={(e) => onOverrideChange({ assigneeId: e.target.value || undefined })}
-          className={`text-xs border rounded px-1 py-0.5 ${assigneeOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+          className={`text-xs border rounded px-1 py-0.5 bg-white text-gray-800 ${assigneeOverridden ? 'border-amber-400' : 'border-gray-200'}`}
         >
           <option value="">— Unassigned —</option>
           {TEAM_MEMBERS.filter((m) => m.isActive).map((m) => (
@@ -236,7 +235,7 @@ function WorkItemRow({
             onOverrideChange({ sprintNumber: isNaN(val) ? undefined : val })
           }}
           placeholder="—"
-          className={`w-12 border rounded px-1 py-0.5 text-xs ${sprintOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+          className={`w-12 border rounded px-1 py-0.5 text-xs bg-white text-gray-800 ${sprintOverridden ? 'border-amber-400' : 'border-gray-200'}`}
         />
       </td>
       {/* Status (editable) */}
@@ -244,7 +243,7 @@ function WorkItemRow({
         <select
           value={localOverride.status ?? item.status}
           onChange={(e) => onOverrideChange({ status: e.target.value })}
-          className={`text-xs border rounded px-1 py-0.5 ${statusOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+          className={`text-xs border rounded px-1 py-0.5 bg-white text-gray-800 ${statusOverridden ? 'border-amber-400' : 'border-gray-200'}`}
         >
           {['not-started', 'in-progress', 'done', 'blocked', 'on-hold'].map((s) => (
             <option key={s} value={s}>{s}</option>
@@ -256,7 +255,7 @@ function WorkItemRow({
         <select
           value={localOverride.priority ?? item.priority ?? ''}
           onChange={(e) => onOverrideChange({ priority: e.target.value || undefined })}
-          className={`text-xs border rounded px-1 py-0.5 capitalize ${priorityOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+          className={`text-xs border rounded px-1 py-0.5 capitalize bg-white text-gray-800 ${priorityOverridden ? 'border-amber-400' : 'border-gray-200'}`}
         >
           <option value="">—</option>
           {['high', 'medium', 'low'].map((p) => (
@@ -269,7 +268,7 @@ function WorkItemRow({
         <select
           value={localOverride.confidence ?? item.confidence}
           onChange={(e) => onOverrideChange({ confidence: e.target.value })}
-          className={`text-xs border rounded px-1 py-0.5 capitalize ${confidenceOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+          className={`text-xs border rounded px-1 py-0.5 capitalize bg-white text-gray-800 ${confidenceOverridden ? 'border-amber-400' : 'border-gray-200'}`}
         >
           {['high', 'medium', 'low'].map((c) => (
             <option key={c} value={c}>{c}</option>
@@ -806,49 +805,6 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
         )}
       </div>
 
-      {/* Manual overrides summary */}
-      {Object.keys(localOverrides).length > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <h2 className="text-sm font-semibold text-yellow-800 mb-2">⚠ Session Overrides (not persisted)</h2>
-          <div className="space-y-1">
-            {Object.entries(localOverrides).map(([itemId, override]) => {
-              const item = allWorkItems.find((wi) => wi.id === itemId)
-              const overrideList: ManualOverride[] = []
-              if (override.estimatedHours !== undefined) {
-                overrideList.push({ field: 'estimatedHours', originalValue: item?.estimatedHours ?? 0, overriddenValue: override.estimatedHours })
-              }
-              if (override.assigneeId !== undefined) {
-                const member = TEAM_MEMBERS.find((m) => m.id === override.assigneeId)
-                overrideList.push({ field: 'assigneeId', originalValue: item?.assigneeId ?? '', overriddenValue: member?.name ?? override.assigneeId })
-              }
-              if (override.primarySkill !== undefined) {
-                const skillLabel = SKILLS.find((s) => s.id === override.primarySkill)?.name ?? override.primarySkill
-                overrideList.push({ field: 'primarySkill', originalValue: item?.primarySkill ?? '', overriddenValue: skillLabel ?? '' })
-              }
-              if (override.requiredSkillLevel !== undefined) {
-                overrideList.push({ field: 'requiredSkillLevel', originalValue: item?.requiredSkillLevel ?? '', overriddenValue: override.requiredSkillLevel })
-              }
-              if (override.sprintNumber !== undefined) {
-                overrideList.push({ field: 'sprintNumber', originalValue: item?.sprintNumber ?? '', overriddenValue: override.sprintNumber })
-              }
-              if (override.status !== undefined) {
-                overrideList.push({ field: 'status', originalValue: item?.status ?? '', overriddenValue: override.status })
-              }
-              if (override.confidence !== undefined) {
-                overrideList.push({ field: 'confidence', originalValue: item?.confidence ?? '', overriddenValue: override.confidence })
-              }
-              if (override.priority !== undefined) {
-                overrideList.push({ field: 'priority', originalValue: item?.priority ?? '', overriddenValue: override.priority })
-              }
-              return overrideList.map((o, j) => (
-                <div key={`${itemId}-${j}`} className="text-xs text-yellow-700">
-                  <span className="font-medium">{item?.title ?? itemId}</span>: {o.field} changed from {String(o.originalValue) || '—'} to {String(o.overriddenValue)}
-                </div>
-              ))
-            })}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
