@@ -62,12 +62,13 @@ export const INITIATIVE_GROUPING_RULES: InitiativeGroupingRule[] = [
     planningType: 'delivery-project',
     stage: 'in-delivery',
     matchProjectKeys: ['ATI'],
-    matchSummaryPatterns: [/sales.?cloud/i, /next.?step.?note/i, /aa.*sales.*retir/i, /revops/i],
+    matchSummaryPatterns: [/sales.?cloud/i, /next.?step.?note/i, /aa.*sales.*retir/i, /revops/i, /cadence/i, /sales.?engagement.?cadence/i],
     matchLabels: ['sales-cloud', 'revenue-ops', 'sales_cloud'],
     epics: [
       { id: 'pe-sc-enablement', title: 'Sales Cloud Enablement', matchSummaryPatterns: [/sales.?cloud/i] },
       { id: 'pe-sc-notes', title: 'Next Step Notes', matchSummaryPatterns: [/next.?step/i] },
       { id: 'pe-sc-retirement', title: 'AA Sales Member Retirement', matchSummaryPatterns: [/retir/i] },
+      { id: 'pe-sc-cadences', title: 'Sales Engagement Cadences', matchSummaryPatterns: [/cadence/i, /sales.?engagement/i] },
       { id: 'pe-sc-docs', title: 'Documentation / Adoption', matchSummaryPatterns: [/doc|adoption/i] },
     ],
   },
@@ -331,20 +332,7 @@ export const INITIATIVE_GROUPING_RULES: InitiativeGroupingRule[] = [
       { id: 'pe-voice-ai-main', title: 'Voice AI Platform', matchSummaryPatterns: [] },
     ],
   },
-  {
-    id: 'pp-sales-cadences',
-    name: 'Sales Engagement Cadences',
-    portfolio: 'ATI',
-    priority: 'high',
-    priorityRank: 4,
-    planningType: 'delivery-project',
-    stage: 'in-delivery',
-    matchProjectKeys: ['ATI'],
-    matchSummaryPatterns: [/cadence/i, /sales.?engagement.?cadence/i],
-    epics: [
-      { id: 'pe-sales-cadences-main', title: 'Sales Engagement Cadences', matchSummaryPatterns: [] },
-    ],
-  },
+  // Sales cadences are now part of pp-sales-cloud (pe-sc-cadences epic)
   {
     id: 'pp-outbound-webhooks',
     name: 'Outbound Lead Webhooks',

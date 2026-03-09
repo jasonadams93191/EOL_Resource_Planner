@@ -368,7 +368,7 @@ const INITIATIVE_SKILL_DEFAULTS: Record<string, { skill: string; role: ResourceT
   'pp-outbound-webhooks': { skill: 'skill-sf-dev',      role: ResourceType.DEVELOPER },
   'pp-sf-flow-refactor':  { skill: 'skill-sf-dev',      role: ResourceType.DEVELOPER },
   'pp-booking-engine':    { skill: 'skill-sf-config',   role: ResourceType.DEVELOPER },
-  'pp-sales-cadences':    { skill: 'skill-sf-config',   role: ResourceType.DEVELOPER },
+  // Sales cadences are now under pp-sales-cloud
   'pp-ai-litify':         { skill: 'skill-ai',          role: ResourceType.DEVELOPER },
   'pp-doctors-map':       { skill: 'skill-sf-dev',      role: ResourceType.DEVELOPER },
   'pp-eol-campaigns':     { skill: 'skill-reporting',   role: ResourceType.ADMIN },

@@ -238,6 +238,7 @@ export function buildSprintRoadmap(
   // Internal slot type
   interface Slot {
     projectId: string
+    epicId: string
     workItemId: string
     estimatedHours: number
     priority: PlanningPriority
@@ -275,6 +276,7 @@ export function buildSprintRoadmap(
         const deps = implicitDeps.get(item.id) ?? item.dependsOnWorkItemIds ?? []
         slots.push({
           projectId: project.id,
+          epicId: epic.id,
           workItemId: item.id,
           estimatedHours: item.estimatedHours,
           priority: getEffectivePriority(item, project),
@@ -401,20 +403,29 @@ export function buildSprintRoadmap(
   const placementMap = new Map<string, WorkItemPlacement>()
   const blockedItems: string[] = []
 
-  // Track which initiatives (projectIds) each member is working on per sprint.
-  // Constraint: max 3 initiatives per person per sprint to prevent context-switching.
-  const MAX_INITIATIVES_PER_MEMBER = 3
-  const memberInitiativesBySprint: Record<string, Set<string>> = {} // key: `sprint:memberId`
+  // ── Per-member sprint focus limits ──
+  // Prevents context-switching overload by limiting how much a person can touch per sprint.
+  const MAX_INITIATIVES_PER_MEMBER = 3  // max distinct initiatives per person per sprint
+  const MAX_EPICS_PER_MEMBER = 3        // max distinct epics per person per sprint
+  const MAX_TASKS_PER_MEMBER = 5        // max tasks per person per sprint
+
+  // Tracking structures: key = `sprint:memberId`
+  const memberInitiativesBySprint: Record<string, Set<string>> = {}
+  const memberEpicsBySprint: Record<string, Set<string>> = {}
+  const memberTaskCountBySprint: Record<string, number> = {}
+
   const getInitiatives = (sprintNum: number, memberId: string): Set<string> => {
     const key = `${sprintNum}:${memberId}`
     if (!memberInitiativesBySprint[key]) memberInitiativesBySprint[key] = new Set()
     return memberInitiativesBySprint[key]
   }
-
-  // Map workItemId → projectId for initiative tracking
-  const workItemToProject: Record<string, string> = {}
-  for (const slot of sorted) {
-    workItemToProject[slot.workItemId] = slot.projectId
+  const getEpics = (sprintNum: number, memberId: string): Set<string> => {
+    const key = `${sprintNum}:${memberId}`
+    if (!memberEpicsBySprint[key]) memberEpicsBySprint[key] = new Set()
+    return memberEpicsBySprint[key]
+  }
+  const getTaskCount = (sprintNum: number, memberId: string): number => {
+    return memberTaskCountBySprint[`${sprintNum}:${memberId}`] ?? 0
   }
 
   for (const slot of sorted) {
@@ -470,9 +481,12 @@ export function buildSprintRoadmap(
 
         if (slot.primarySkill && skillLevel === 0) continue  // member lacks the skill entirely
 
-        // Initiative cap: max 3 initiatives per member per sprint
+        // Focus limits: prevent context-switching overload per member per sprint
         const memberInits = getInitiatives(sprintNum, member.id)
         if (!memberInits.has(slot.projectId) && memberInits.size >= MAX_INITIATIVES_PER_MEMBER) continue
+        const memberEpics = getEpics(sprintNum, member.id)
+        if (!memberEpics.has(slot.epicId) && memberEpics.size >= MAX_EPICS_PER_MEMBER) continue
+        if (getTaskCount(sprintNum, member.id) >= MAX_TASKS_PER_MEMBER) continue
 
         // Score: prefer higher skill level first (top candidates), then most remaining hours
         // This ensures higher-skilled members are assigned before less-skilled ones
@@ -489,8 +503,10 @@ export function buildSprintRoadmap(
 
         sprintCap[bestMemberId] = Math.max(0, (sprintCap[bestMemberId] ?? 0) - slot.estimatedHours)
 
-        // Record initiative for the member in this sprint
+        // Record initiative, epic, and task count for the member in this sprint
         getInitiatives(sprintNum, bestMemberId).add(slot.projectId)
+        getEpics(sprintNum, bestMemberId).add(slot.epicId)
+        memberTaskCountBySprint[`${sprintNum}:${bestMemberId}`] = getTaskCount(sprintNum, bestMemberId) + 1
 
         const placement: WorkItemPlacement = {
           workItemId: slot.workItemId,
