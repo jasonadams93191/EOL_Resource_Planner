@@ -156,7 +156,7 @@ export class JiraClient {
     let total = Infinity
 
     while (startAt < total) {
-      const url = new URL(`${this.baseUrl}/rest/api/3/search`)
+      const url = new URL(`${this.baseUrl}/rest/api/3/search/jql`)
       url.searchParams.set('jql', jql)
       url.searchParams.set('fields', fields.join(','))
       url.searchParams.set('maxResults', String(maxPerPage))
