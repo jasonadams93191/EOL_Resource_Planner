@@ -81,6 +81,10 @@ export async function POST(request: NextRequest) {
   const forceRecompute = searchParams.get('force') === 'true'
   // ?llm=false → run deterministic layer only, skip Anthropic
   const useLLM = searchParams.get('llm') !== 'false'
+  // Chunked processing: ?offset=0&limit=3 — process a slice of initiatives per call.
+  // Call repeatedly with increasing offsets to process all initiatives without timeout.
+  const chunkOffset = Math.max(0, parseInt(searchParams.get('offset') ?? '0', 10) || 0)
+  const chunkLimit = Math.min(20, Math.max(1, parseInt(searchParams.get('limit') ?? '0', 10) || 5))
 
   const snapshots = await getAllSnapshotsAsync()
   if (!snapshots['ws-eol'] && !snapshots['ws-ati']) {
@@ -112,9 +116,13 @@ export async function POST(request: NextRequest) {
   let analyzed = 0
   let tasksSuggested = 0
 
-  for (const project of enhanced) {
-    if (project.priority === 'low') continue
-    if (analyzed >= cfg.maxInitiativesPerRun) break
+  // Apply chunking: filter eligible projects, then slice by offset/limit
+  const eligibleProjects = enhanced.filter((p) => p.priority !== 'low')
+  const totalEligible = eligibleProjects.length
+  const chunkProjects = eligibleProjects.slice(chunkOffset, chunkOffset + chunkLimit)
+  const hasMore = chunkOffset + chunkLimit < totalEligible
+
+  for (const project of chunkProjects) {
 
     const latestUpdated = getLatestUpdated(project)
     const key = cacheKey(project.id, latestUpdated, cfg.model, useLLM)
@@ -201,6 +209,8 @@ export async function POST(request: NextRequest) {
     fieldsUpdated: totalFieldsUpdated,
     overridesPreserved: totalOverridesPreserved,
     llmEnabled: cfg.enabled && useLLM,
+    // Chunk metadata — use to drive sequential calls
+    chunk: { offset: chunkOffset, limit: chunkLimit, total: totalEligible, hasMore },
     model: cfg.model,
     errors: errors.length > 0 ? errors : undefined,
   })

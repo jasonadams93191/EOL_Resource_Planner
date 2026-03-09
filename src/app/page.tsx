@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
-import { buildSprintRoadmap } from '@/lib/planning/sprint-engine'
+import { buildSprintRoadmap, priorityWeight } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
 import { ScenarioBar } from '@/components/ScenarioBar'
 import { PortfolioView } from '@/components/planning/PortfolioView'
@@ -21,10 +21,30 @@ export default function DashboardPage() {
   const [startDate] = useState(START_DATE)
   const [dataMode] = useState<DataSourceMode>('seed')
   const [viewMode, setViewMode] = useState<'plan' | 'timeline'>('plan')
+  const [targetDates, setTargetDates] = useState<Record<string, string>>({})
+
+  // Re-sort projects by target date tightness so the sprint engine schedules
+  // deadline-constrained initiatives first, cascading all others later.
+  const projectsForRoadmap = useMemo(() => {
+    const msPerSprint = 14 * 24 * 60 * 60 * 1000
+    const startMs = new Date(startDate).getTime()
+    return [...projects].sort((a, b) => {
+      const aTarget = targetDates[a.id]
+      const bTarget = targetDates[b.id]
+      if (aTarget && bTarget) {
+        const aTargetSprint = Math.max(1, Math.ceil((new Date(aTarget).getTime() - startMs) / msPerSprint))
+        const bTargetSprint = Math.max(1, Math.ceil((new Date(bTarget).getTime() - startMs) / msPerSprint))
+        return aTargetSprint - bTargetSprint
+      }
+      if (aTarget) return -1
+      if (bTarget) return 1
+      return priorityWeight(a.priority, a.priorityRank) - priorityWeight(b.priority, b.priorityRank)
+    })
+  }, [projects, targetDates, startDate])
 
   const roadmap = useMemo(
-    () => buildSprintRoadmap(projects, members, startDate),
-    [projects, members, startDate]
+    () => buildSprintRoadmap(projectsForRoadmap, members, startDate),
+    [projectsForRoadmap, members, startDate]
   )
 
   const bottlenecks = useMemo(
@@ -52,6 +72,16 @@ export default function DashboardPage() {
   function reset() {
     setProjects(mockAllPlanningProjects)
     setMembers(TEAM_MEMBERS)
+    setTargetDates({})
+  }
+
+  function setTargetDate(projectId: string, date: string | null) {
+    setTargetDates((prev) => {
+      const next = { ...prev }
+      if (date) next[projectId] = date
+      else delete next[projectId]
+      return next
+    })
   }
 
   const criticalBottlenecks = bottlenecks.personBottlenecks.filter((b) => b.overloadedSprints.length > 1)
@@ -113,13 +143,21 @@ export default function DashboardPage() {
       </div>
 
       {viewMode === 'plan' ? (
-        <PortfolioView projects={projects} members={members} roadmap={roadmap} startDate={startDate} />
+        <PortfolioView
+          projects={projects}
+          members={members}
+          roadmap={roadmap}
+          startDate={startDate}
+          targetDates={targetDates}
+          onSetTargetDate={setTargetDate}
+        />
       ) : (
         <TimelineView
           projects={projects}
           members={members}
           roadmap={roadmap}
           personBottlenecks={bottlenecks.personBottlenecks}
+          targetDates={targetDates}
         />
       )}
 

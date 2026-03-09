@@ -5,6 +5,12 @@ import { listScenarios, getScenario, saveScenario, type SavedScenario } from '@/
 import type { PlanningProject, TeamMember } from '@/types/planning'
 import type { DataSourceMode } from '@/lib/planning/data-source-mode'
 
+interface BaselineStatus {
+  lockedAt: string
+  source: 'jira' | 'seed'
+  stats: { totalProjects: number; totalWorkItems: number; assignedCount: number; overflowCount: number }
+}
+
 interface ScenarioBarProps {
   projects: PlanningProject[]
   members: TeamMember[]
@@ -19,10 +25,35 @@ export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, on
   const [flash, setFlash] = useState(false)
   const [scenarios, setScenarios] = useState<SavedScenario[]>([])
   const [selectedId, setSelectedId] = useState('')
+  const [baseline, setBaseline] = useState<BaselineStatus | null>(null)
+  const [locking, setLocking] = useState(false)
+  const [lockFlash, setLockFlash] = useState('')
 
   useEffect(() => {
     setScenarios(listScenarios())
+    // Load baseline status
+    fetch('/api/plan').then(r => r.json()).then(d => {
+      if (d.baseline) setBaseline(d.baseline)
+    }).catch(() => {})
   }, [])
+
+  async function handleLockPlan() {
+    setLocking(true)
+    try {
+      const res = await fetch('/api/plan', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        setBaseline({ lockedAt: data.lockedAt, source: data.source, stats: data.stats })
+        setLockFlash(`Locked (${data.stats.assignedCount} assigned)`)
+        setTimeout(() => setLockFlash(''), 3000)
+      }
+    } catch {
+      setLockFlash('Error locking plan')
+      setTimeout(() => setLockFlash(''), 3000)
+    } finally {
+      setLocking(false)
+    }
+  }
 
   function handleSave() {
     if (!name.trim()) return
@@ -108,6 +139,28 @@ export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, on
       >
         Reset
       </button>
+
+      <span className="text-gray-200">|</span>
+
+      {/* Lock Plan (Standard Template) */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleLockPlan}
+          disabled={locking}
+          className="rounded px-2.5 py-1 text-xs font-medium bg-[#1a2e6b] text-white hover:bg-[#162660] disabled:opacity-50 transition-colors"
+          title="Lock current plan as the standard template. Only Jira changes will trigger updates."
+        >
+          {locking ? 'Locking…' : lockFlash || 'Lock Plan'}
+        </button>
+        {baseline && (
+          <span className="text-[10px] text-gray-400">
+            Locked {new Date(baseline.lockedAt).toLocaleDateString()} · {baseline.stats.assignedCount} assigned
+            {baseline.stats.overflowCount > 0 && (
+              <span className="text-orange-500"> · {baseline.stats.overflowCount} over capacity</span>
+            )}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

@@ -23,6 +23,8 @@ interface PortfolioViewProps {
   members: TeamMember[]
   roadmap?: SprintRoadmap
   startDate?: string
+  targetDates?: Record<string, string>
+  onSetTargetDate?: (projectId: string, date: string | null) => void
 }
 
 const PORTFOLIO_COLORS: Record<Portfolio, { bg: string; border: string; badge: string; text: string }> = {
@@ -85,11 +87,15 @@ function ProjectSummaryCard({
   members,
   roadmap,
   startDate,
+  targetDate,
+  onSetTargetDate,
 }: {
   project: PlanningProject
   members: TeamMember[]
   roadmap?: SprintRoadmap
   startDate?: string
+  targetDate?: string
+  onSetTargetDate?: (date: string | null) => void
 }) {
   const colors = PORTFOLIO_COLORS[project.portfolio]
   const totalItems = project.epics.reduce((s, e) => s + e.workItems.length, 0)
@@ -211,8 +217,40 @@ function ProjectSummaryCard({
         {completionEnd && (
           <>
             <span>·</span>
-            <span className="text-indigo-600">Est. complete: S{lastSprint} ({shortDate(completionEnd)})</span>
+            <span className="text-indigo-600">Est: S{lastSprint} ({shortDate(completionEnd)})</span>
           </>
+        )}
+        {targetDate && completionEnd && (
+          <span className={completionEnd <= targetDate ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
+            {completionEnd <= targetDate ? '✓ On track' : '⚠ Late'}
+          </span>
+        )}
+      </div>
+
+      {/* Target date row — stopPropagation prevents the card Link from navigating */}
+      <div
+        className="flex items-center gap-2 mt-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <label className="text-[10px] text-gray-400 shrink-0">Target date:</label>
+        <input
+          type="date"
+          value={targetDate ?? ''}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            e.stopPropagation()
+            onSetTargetDate?.(e.target.value || null)
+          }}
+          className="text-[10px] border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#f28c28] cursor-pointer"
+        />
+        {targetDate && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onSetTargetDate?.(null) }}
+            className="text-[10px] text-gray-400 hover:text-red-500"
+            title="Clear target date"
+          >
+            ✕
+          </button>
         )}
       </div>
 
@@ -223,7 +261,7 @@ function ProjectSummaryCard({
   )
 }
 
-export function PortfolioView({ projects, members, roadmap, startDate }: PortfolioViewProps) {
+export function PortfolioView({ projects, members, roadmap, startDate, targetDates, onSetTargetDate }: PortfolioViewProps) {
   const [stageFilter, setStageFilter] = useState<ProjectStage | 'all'>('all')
 
   const filteredProjects = stageFilter === 'all'
@@ -279,6 +317,8 @@ export function PortfolioView({ projects, members, roadmap, startDate }: Portfol
                     members={members}
                     roadmap={roadmap}
                     startDate={startDate}
+                    targetDate={targetDates?.[project.id]}
+                    onSetTargetDate={(date) => onSetTargetDate?.(project.id, date)}
                   />
                 </Link>
               ))}
