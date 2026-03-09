@@ -25,9 +25,24 @@ const STATUS_STYLES: Record<string, string> = {
   'on-hold':     'bg-yellow-100 text-yellow-700',
 }
 
+const STATUS_OPTIONS = ['not-started', 'in-progress', 'done', 'blocked', 'on-hold']
+
+function StatusSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`rounded-full px-2 py-0.5 text-xs font-medium border-0 cursor-pointer ${STATUS_STYLES[value] ?? 'bg-gray-100 text-gray-600'}`}
+    >
+      {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+    </select>
+  )
+}
+
 export default function EpicRecordPage() {
   const params = useParams()
   const [result, setResult] = useState<{ epic: PlanningEpic; project: PlanningProject } | null | 'loading'>('loading')
+  const [localStatus, setLocalStatus] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<string>('all')
   const [localTasks, setLocalTasks] = useState<PlanningWorkItem[]>([])
@@ -76,6 +91,15 @@ export default function EpicRecordPage() {
   }
 
   const { epic, project } = result
+  const currentEpicStatus = localStatus ?? epic.status
+  const handleEpicStatusChange = async (v: string) => {
+    setLocalStatus(v)
+    await fetch('/api/planning/override', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: epic.id, itemType: 'epic', overrides: { status: v } }),
+    })
+  }
   const totalHours = epic.workItems.reduce((s, w) => s + w.estimatedHours, 0)
 
   const filteredItems = epic.workItems.filter((w) => {
@@ -99,9 +123,7 @@ export default function EpicRecordPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <h2 className="text-xl font-semibold text-gray-900">{epic.title}</h2>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[epic.status] ?? 'bg-gray-100 text-gray-600'}`}>
-          {epic.status}
-        </span>
+        <StatusSelect value={currentEpicStatus} onChange={handleEpicStatusChange} />
       </div>
 
       {/* Overview */}
@@ -115,9 +137,7 @@ export default function EpicRecordPage() {
           <div>
             <dt className="text-gray-500">Status</dt>
             <dd className="mt-0.5">
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[epic.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                {epic.status}
-              </span>
+              <StatusSelect value={currentEpicStatus} onChange={handleEpicStatusChange} />
             </dd>
           </div>
           <div>

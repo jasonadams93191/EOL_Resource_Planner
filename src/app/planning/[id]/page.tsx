@@ -500,6 +500,12 @@ export default function InitiativePage() {
       ...prev,
       [itemId]: { ...(prev[itemId] ?? {}), ...updates },
     }))
+    // Persist to server
+    void fetch('/api/planning/override', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId, itemType: 'work-item', overrides: updates }),
+    })
   }
 
   if (allProjects === null) {
@@ -577,7 +583,11 @@ export default function InitiativePage() {
           {/* Priority select */}
           <select
             value={priority}
-            onChange={(e) => setPriority(e.target.value as PlanningPriority)}
+            onChange={(e) => {
+              const v = e.target.value as PlanningPriority
+              setPriority(v)
+              void fetch('/api/planning/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: project.id, itemType: 'project', overrides: { priority: v } }) })
+            }}
             className={`text-xs font-medium rounded px-2 py-0.5 border-0 cursor-pointer capitalize ${PRIORITY_STYLES[priority]}`}
           >
             {ALL_PRIORITIES.map((p) => (
@@ -606,7 +616,11 @@ export default function InitiativePage() {
           {/* Stage select */}
           <select
             value={stage}
-            onChange={(e) => setStage(e.target.value as ProjectStage)}
+            onChange={(e) => {
+              const v = e.target.value as ProjectStage
+              setStage(v)
+              void fetch('/api/planning/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: project.id, itemType: 'project', overrides: { stage: v } }) })
+            }}
             className={`text-xs rounded px-2 py-0.5 border-0 cursor-pointer ${STAGE_STYLES[stage]}`}
           >
             {ALL_STAGES.map(([val, label]) => (
@@ -664,7 +678,11 @@ export default function InitiativePage() {
             <span className="text-xs text-gray-500">Owner:</span>
             <select
               value={owner ?? ''}
-              onChange={(e) => setOwner(e.target.value || undefined)}
+              onChange={(e) => {
+                const v = e.target.value || undefined
+                setOwner(v)
+                void fetch('/api/planning/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: project.id, itemType: 'project', overrides: { owner: v ?? null } }) })
+              }}
               className="text-xs border border-gray-200 rounded px-1.5 py-0.5"
             >
               <option value="">— Unassigned —</option>

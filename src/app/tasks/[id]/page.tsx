@@ -29,10 +29,42 @@ const STATUS_STYLES: Record<string, string> = {
   'on-hold':     'bg-yellow-100 text-yellow-700',
 }
 
+const STATUS_OPTIONS = ['not-started', 'in-progress', 'done', 'blocked', 'on-hold']
+
+async function saveOverride(itemId: string, itemType: string, overrides: Record<string, unknown>) {
+  await fetch('/api/planning/override', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemId, itemType, overrides }),
+  })
+}
+
+function StatusSelect({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`rounded-full px-2 py-0.5 text-xs font-medium border-0 cursor-pointer appearance-none pr-5 ${STATUS_STYLES[value] ?? 'bg-gray-100 text-gray-600'}`}
+      style={{ backgroundImage: 'none' }}
+    >
+      {STATUS_OPTIONS.map((s) => (
+        <option key={s} value={s}>{s}</option>
+      ))}
+    </select>
+  )
+}
+
 export default function TaskRecordPage() {
   const params = useParams()
   const [result, setResult] = useState<FindResult | null | 'loading'>('loading')
   const [allProjects, setAllProjects] = useState<PlanningProject[]>(mockAllPlanningProjects)
+  const [localStatus, setLocalStatus] = useState<string | null>(null)
 
   useEffect(() => {
     const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''
@@ -61,6 +93,12 @@ export default function TaskRecordPage() {
 
   const { wi, epic, project } = result
   const kind = getSourceKind(wi.id, !!wi.jira?.issueKey)
+  const currentStatus = localStatus ?? wi.status
+
+  const handleStatusChange = async (newStatus: string) => {
+    setLocalStatus(newStatus)
+    await saveOverride(wi.id, 'work-item', { status: newStatus })
+  }
 
   const assignee = wi.assigneeId ? TEAM_MEMBERS.find((m) => m.id === wi.assigneeId) : null
 
@@ -95,9 +133,7 @@ export default function TaskRecordPage() {
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SOURCE_BADGE_STYLES[kind]}`}>
             {SOURCE_BADGE_LABELS[kind]}
           </span>
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[wi.status] ?? 'bg-gray-100 text-gray-600'}`}>
-            {wi.status}
-          </span>
+          <StatusSelect value={currentStatus} onChange={handleStatusChange} />
         </div>
       </div>
 

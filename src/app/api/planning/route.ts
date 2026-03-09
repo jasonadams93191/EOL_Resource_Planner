@@ -24,6 +24,7 @@ import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
 import { applyEnhancements } from '@/lib/planning/enhancements'
 import { getAllSnapshotsAsync } from '@/lib/jira/snapshot-store'
 import { importPlanningFromJiraSnapshot } from '@/lib/jira/import-snapshot'
+import { getAllOverridesAsync, applyOverrides } from '@/lib/planning/override-store'
 import type { Portfolio, TeamMember, PlanningProject } from '@/types/planning'
 
 const START_DATE = '2026-03-09'
@@ -50,6 +51,12 @@ export async function GET(request: NextRequest) {
         dataSource = 'jira-snapshot'
       }
     }
+  }
+
+  // Apply persisted manual overrides (status, hours, etc.) on top of computed data
+  const storedOverrides = await getAllOverridesAsync()
+  if (Object.keys(storedOverrides).length > 0) {
+    baseProjects = applyOverrides(baseProjects, storedOverrides)
   }
 
   // Filter by portfolio if requested
@@ -99,6 +106,12 @@ export async function POST(request: NextRequest) {
         snapshots['ws-ati']
       )
       if (imported.length > 0) allProjects = applyEnhancements(imported)
+    }
+
+    // Apply persisted overrides
+    const storedOverrides = await getAllOverridesAsync()
+    if (Object.keys(storedOverrides).length > 0) {
+      allProjects = applyOverrides(allProjects, storedOverrides)
     }
 
     // Filter projects if projectIds provided
