@@ -1,0 +1,21 @@
+---
+engines:
+  eslint:
+    enabled: true
+  # TypeScript is analyzed via ESLint
+  # Disable engines not relevant to this stack
+  pylint:
+    enabled: false
+  rubocop:
+    enabled: false
+  csslint:
+    enabled: false
+  stylelint:
+    enabled: true
+
+exclude_paths:
+  - ".next/**"
+  - "node_modules/**"
+  - "coverage/**"
+  - "**/*.min.js"
+  - "src/lib/mock/**"     # mock/seed data — not production logic

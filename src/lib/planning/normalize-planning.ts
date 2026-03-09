@@ -21,6 +21,7 @@
 // ============================================================
 
 import type { Issue, Epic } from '@/types/domain'
+import { ResourceType } from '@/types/domain'
 import type {
   PlanningProject,
   PlanningEpic,
@@ -28,6 +29,7 @@ import type {
   PlanningSourceRef,
   PlanningStatus,
   PlanningPriority,
+  Portfolio,
 } from '@/types/planning'
 
 // ── Status / Priority Maps ────────────────────────────────────
@@ -99,10 +101,13 @@ export function normalizePlanningWorkItem(
     planningEpicId,
     status: toPlanningStatus(issue.status),
     priority: toPlanningPriority(issue.priority),
-    estimatedHours: issue.storyPoints ? issue.storyPoints * 4 : undefined,
     assigneeId: issue.assigneeId,
     sourceRefs: [jiraIssueRef(issue)],
     notes: undefined,
+    // Required Phase 1 fields — defaults that callers can override
+    estimatedHours: issue.storyPoints ? issue.storyPoints * 4 : 8,
+    confidence: 'low',
+    primaryRole: ResourceType.DEVELOPER,
     ...overrides,
   }
 }
@@ -117,6 +122,7 @@ export function normalizePlanningEpic(
   epic: Epic,
   issues: Issue[],
   planningProjectId: string,
+  portfolio: Portfolio,
   overrides?: Partial<Omit<PlanningEpic, 'workItems'>>
 ): PlanningEpic {
   const epicId = `pe-${epic.id}`
@@ -138,6 +144,7 @@ export function normalizePlanningEpic(
     planningProjectId,
     status: derivedStatus,
     priority: toPlanningPriority(epic.priority),
+    portfolio,
     workItems,
     sourceRefs: [jiraEpicRef(epic)],
     notes: undefined,
@@ -155,7 +162,9 @@ export function normalizePlanningProject(
   name: string,
   epics: PlanningEpic[],
   sourceRefs: PlanningSourceRef[],
-  overrides?: Partial<Omit<PlanningProject, 'epics' | 'sourceRefs'>>
+  portfolio: Portfolio,
+  priority: PlanningPriority,
+  overrides?: Partial<Omit<PlanningProject, 'epics' | 'sourceRefs' | 'portfolio' | 'priority' | 'stage'>>
 ): PlanningProject {
   const statuses = epics.map((e) => e.status)
   const derivedStatus: PlanningStatus = statuses.includes('blocked')
@@ -170,6 +179,9 @@ export function normalizePlanningProject(
     id,
     name,
     status: derivedStatus,
+    portfolio,
+    priority,
+    stage: 'backlog',  // default stage; callers override via overrides
     epics,
     sourceRefs,
     ...overrides,
