@@ -68,7 +68,7 @@ export async function saveSnapshotAsync(ws: WorkspaceId, snapshot: JiraSnapshot)
     await ensureTable(sql)
     await sql`
       INSERT INTO jira_snapshots (workspace_id, data, updated_at)
-      VALUES (${ws}, ${snapshot as unknown as string}, NOW())
+      VALUES (${ws}, ${JSON.stringify(snapshot)}::jsonb, NOW())
       ON CONFLICT (workspace_id) DO UPDATE
         SET data = EXCLUDED.data,
             updated_at = EXCLUDED.updated_at
