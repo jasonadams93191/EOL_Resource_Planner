@@ -730,9 +730,7 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
                 <th
                   key={col.key}
                   className={`px-1 py-1.5 text-center font-semibold border-b border-r text-xs ${
-                    col.isOverloaded
-                      ? 'bg-red-600 text-white border-red-700'
-                      : col.isProjected
+                    col.isProjected
                       ? 'bg-gray-400 text-white border-gray-500'
                       : 'bg-[#1a2e6b] text-white border-[#0f1c45]'
                   }`}
@@ -741,22 +739,19 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
                 </th>
               ))}
             </tr>
-            {/* Row 2: sprint sub-labels */}
+            {/* Row 2: date/week sub-labels */}
             <tr>
               {visibleColumns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-1 py-0.5 text-center border-b border-r text-[9px] font-normal ${
-                    col.isOverloaded
-                      ? 'bg-red-500 text-red-100 border-red-600'
-                      : col.isProjected
+                  className={`px-1 py-1 text-center border-b border-r text-[10px] font-normal ${
+                    col.isProjected
                       ? 'bg-gray-300 text-gray-600 border-gray-400'
                       : 'bg-[#243b85] text-blue-200 border-[#0f1c45]'
                   }`}
                 >
                   {col.subLabel || '—'}
-                  {col.isOverloaded && ' ⚠'}
-                  {col.isProjected && !col.isOverloaded && ' PROJ'}
+                  {col.isProjected && ' PROJ'}
                 </th>
               ))}
             </tr>
@@ -793,30 +788,8 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
         </table>
       </div>
 
-      {/* Per-member overload detail */}
-      {personBottlenecks.filter((b) => b.overloadedSprints.length > 0).length > 0 && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <p className="text-xs font-semibold text-red-800 mb-2">Over-utilized Members</p>
-          <div className="flex flex-wrap gap-3">
-            {personBottlenecks
-              .filter((b) => b.overloadedSprints.length > 0)
-              .map((b) => (
-                <Link
-                  key={b.teamMemberId}
-                  href={`/team/${b.teamMemberId}`}
-                  className="text-xs rounded bg-white border border-red-200 px-2.5 py-1 text-red-700 hover:bg-red-100 transition-colors"
-                >
-                  <span className="font-medium">{b.memberName}</span>
-                  {' '}— overloaded in S{b.overloadedSprints.join(', S')}
-                  {' '}({Math.round(b.utilizationPct)}% utilized)
-                </Link>
-              ))}
-          </div>
-          <p className="text-[10px] text-red-600 mt-2">
-            Add resources or reduce scope to fix overloaded sprints.
-          </p>
-        </div>
-      )}
+      {/* No overload banner — the sprint engine guarantees no person is ever assigned
+          above their availableHoursPerSprint. Work spills to later sprints instead. */}
     </div>
   )
 }

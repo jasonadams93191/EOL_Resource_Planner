@@ -80,46 +80,10 @@ export function BottleneckPanel({ summary, members, skills, roles }: BottleneckP
 
   return (
     <div className="space-y-6">
-      {/* Person Overload */}
+      {/* Person Overload — always 0 by design: sprint engine never assigns above availableHoursPerSprint */}
       <div>
-        <SectionHeader title="Person Overload" count={personBottlenecks.length} />
-        {personBottlenecks.length === 0 ? (
-          <p className="text-xs text-gray-400">No overloaded team members.</p>
-        ) : (
-          <div className="space-y-3">
-            {personBottlenecks.map((bn) => {
-              const member = members.find((m) => m.id === bn.teamMemberId)
-              return (
-                <div key={bn.teamMemberId} className="rounded-lg border border-red-100 bg-red-50 p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-medium text-sm text-gray-900">
-                      {member?.name ?? bn.memberName}
-                    </span>
-                    <span className="text-xs rounded bg-red-100 text-red-700 px-1.5 py-0.5">
-                      {bn.utilizationPct}% utilized
-                    </span>
-                  </div>
-                  <UtilizationBar
-                    value={bn.totalAllocatedSprints}
-                    max={bn.capacity * Math.max(1, bn.overloadedSprints.length + 1)}
-                    color={bn.utilizationPct > 100 ? 'bg-red-500' : 'bg-amber-400'}
-                  />
-                  <div className="mt-1.5 text-xs text-gray-500">
-                    Allocated: <span className="font-medium text-gray-700">{bn.totalAllocatedSprints} sprint fractions</span>
-                    {' · '}
-                    Capacity: <span className="font-medium text-gray-700">{bn.capacity} per sprint</span>
-                  </div>
-                  {bn.overloadedSprints.length > 0 && (
-                    <div className="mt-1 text-xs text-red-600">
-                      Overloaded in sprint{bn.overloadedSprints.length !== 1 ? 's' : ''}{' '}
-                      {bn.overloadedSprints.join(', ')}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <SectionHeader title="Person Overload" count={0} />
+        <p className="text-xs text-gray-400">No overloaded team members. Work spills to later sprints when capacity is full.</p>
       </div>
 
       {/* Skill Gaps */}

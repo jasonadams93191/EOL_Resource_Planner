@@ -89,6 +89,15 @@ function rawToWorkItem(
     label: `${issue.key}: ${f.summary}`,
   }
 
+  // Infer skill from Jira issue type so sprint engine can route to appropriate members
+  const issueType = f.issuetype?.name?.toLowerCase() ?? ''
+  let inferredSkill: string | undefined
+  if (issueType.includes('bug') || issueType.includes('sub-task') || issueType.includes('technical')) {
+    inferredSkill = 'salesforce-dev'
+  } else if (issueType.includes('story') || issueType.includes('task') || issueType.includes('epic') || issueType.includes('improvement')) {
+    inferredSkill = 'salesforce-admin'
+  }
+
   return {
     id: `pwi-${issue.key.toLowerCase()}`,
     title: f.summary,
@@ -100,6 +109,8 @@ function rawToWorkItem(
     estimatedHours: 8,       // default; analysis engine may refine
     confidence: 'low',
     primaryRole: ResourceType.DEVELOPER,
+    primarySkill: inferredSkill,
+    requiredSkillLevel: inferredSkill ? 1 : undefined,  // level 1 = any qualified member
     jira: jiraData,
   }
 }

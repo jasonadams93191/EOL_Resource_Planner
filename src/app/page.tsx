@@ -97,7 +97,6 @@ export default function DashboardPage() {
     [projects, members, roadmap, bottlenecks]
   )
 
-  const criticalBottlenecks = bottlenecks.personBottlenecks.filter((b) => b.overloadedSprints.length > 1)
   const activeMembers = members.filter((m) => m.isActive)
 
   return (
@@ -115,24 +114,6 @@ export default function DashboardPage() {
 
       {/* Reality Score */}
       <RealityScoreWidget score={realityScore} />
-
-      {/* Bottleneck alerts */}
-      {criticalBottlenecks.length > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm font-medium text-amber-800 mb-1">Resource Bottlenecks Detected</p>
-          <div className="flex flex-wrap gap-2">
-            {criticalBottlenecks.map((b) => (
-              <Link
-                key={b.teamMemberId}
-                href={`/team/${b.teamMemberId}`}
-                className="text-xs rounded bg-amber-100 border border-amber-200 px-2 py-0.5 text-amber-700 hover:bg-amber-200 transition-colors"
-              >
-                {b.memberName} — overloaded {b.overloadedSprints.length} sprint{b.overloadedSprints.length !== 1 ? 's' : ''}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* View toggle */}
       <div className="flex items-center justify-between">

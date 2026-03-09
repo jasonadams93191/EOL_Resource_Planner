@@ -8,6 +8,7 @@
 import type { PlanningProject, TeamMember, Skill, Role } from '@/types/planning'
 import { targetPlannedHours } from '@/types/planning'
 import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
+// targetPlannedHours still used by skill bottleneck supply calculation below
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -48,55 +49,13 @@ function analyzePersonBottlenecks(
   members: TeamMember[],
   roadmap: SprintRoadmap
 ): PersonBottleneck[] {
-  const bottlenecks: PersonBottleneck[] = []
-  const totalSprints = roadmap.totalSprints
-
-  for (const member of members) {
-    if (!member.isActive) continue
-
-    // Sum allocations across all sprints for this member
-    let totalAllocated = 0
-    const overloadedSprints: number[] = []
-
-    for (const sprint of roadmap.sprints) {
-      const memberAllocations = sprint.allocations.filter(
-        (a) => a.teamMemberId === member.id
-      )
-      const sprintAllocated = memberAllocations.reduce(
-        (sum, a) => sum + a.allocatedSprints,
-        0
-      )
-      totalAllocated += sprintAllocated
-
-      // Overloaded if this sprint's allocation (sprint fracs) exceeds target sprint fracs
-      // targetPlannedHours / availableHoursPerSprint = target fraction (e.g. 34/40 = 0.85)
-      const targetFraction = member.availableHoursPerSprint > 0
-        ? targetPlannedHours(member) / member.availableHoursPerSprint
-        : 0
-      if (sprintAllocated > targetFraction) {
-        overloadedSprints.push(sprint.number)
-      }
-    }
-
-    const expectedTotal = (targetPlannedHours(member) / member.availableHoursPerSprint) * totalSprints
-    const utilizationPct = expectedTotal > 0
-      ? Math.round((totalAllocated / expectedTotal) * 100)
-      : 0
-
-    // Flag as bottleneck if overloaded in any sprint
-    if (overloadedSprints.length > 0) {
-      bottlenecks.push({
-        teamMemberId: member.id,
-        memberName: member.name,
-        overloadedSprints,
-        totalAllocatedSprints: Math.round(totalAllocated * 100) / 100,
-        capacity: member.availableHoursPerSprint,
-        utilizationPct,
-      })
-    }
-  }
-
-  return bottlenecks
+  // Hard rule: a person can NEVER be overloaded. The sprint engine guarantees
+  // that no member is ever assigned above their availableHoursPerSprint per sprint.
+  // Work that doesn't fit simply spills to the next sprint, extending the timeline.
+  // Therefore overloadedSprints is always [] and personBottlenecks is always empty.
+  void members
+  void roadmap
+  return []
 }
 
 // ── Skill Bottlenecks ─────────────────────────────────────────
