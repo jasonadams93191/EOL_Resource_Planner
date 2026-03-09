@@ -393,7 +393,53 @@ export interface PlanningProject {
   owner?: string                      // team member id
   planningType?: PlanningType         // initiative classification
   jira?: JiraIssueData
+  blockers?: ProjectBlocker[]         // external constraints (vendor timelines, approvals, dependencies)
+  /** @deprecated Use blockers instead */
+  vendorBlocks?: ProjectBlocker[]
 }
+
+// ── Blocker Types ──────────────────────────────────────────────
+// Classifies what kind of external constraint is blocking an initiative.
+export type BlockerType = 'vendor' | 'dependency' | 'resource' | 'approval' | 'other'
+
+export const BLOCKER_TYPE_LABELS: Record<BlockerType, string> = {
+  vendor:     'Vendor Timeline',
+  dependency: 'External Dependency',
+  resource:   'Resource Constraint',
+  approval:   'Approval Required',
+  other:      'Other',
+}
+
+export const BLOCKER_TYPE_ICONS: Record<BlockerType, string> = {
+  vendor:     '⏳',
+  dependency: '🔗',
+  resource:   '👤',
+  approval:   '✅',
+  other:      '⚠️',
+}
+
+// ── Project Blocker ────────────────────────────────────────────
+// Represents an external constraint that affects an initiative's timeline.
+// Examples: vendor delivers in 60-90 days, legal approval required, headcount blocked.
+// Blockers are flagged as indicators on the initiative row — NOT separate timeline rows.
+// The blocker's resolutionDate drives the earliest possible completion for work that depends on it.
+export interface ProjectBlocker {
+  id: string
+  type: BlockerType
+  title: string              // e.g. "RingCentral integration" or "Legal review"
+  description?: string
+  // Duration-based (vendor / dependency types)
+  minDays?: number           // minimum window (e.g. 60)
+  maxDays?: number           // maximum window (e.g. 90)
+  // Timing
+  startAfterDate?: string    // ISO — when this blocker period begins
+  resolutionDate?: string    // ISO — estimated when blocker is resolved / cleared
+}
+
+// ── VendorBlock (deprecated alias) ────────────────────────────
+// Kept for backward compatibility. Use ProjectBlocker with type='vendor' instead.
+/** @deprecated Use ProjectBlocker with type='vendor' */
+export type VendorBlock = ProjectBlocker
 
 // ── Effective Priority Helper ──────────────────────────────────
 // Derives effective priority by walking up to project level.

@@ -11,6 +11,8 @@ interface BaselineStatus {
   stats: { totalProjects: number; totalWorkItems: number; assignedCount: number; overflowCount: number }
 }
 
+type SyncStage = 'sync' | 'import' | 'enhance' | null
+
 interface ScenarioBarProps {
   projects: PlanningProject[]
   members: TeamMember[]
@@ -18,9 +20,10 @@ interface ScenarioBarProps {
   dataMode: DataSourceMode
   onLoad: (scenario: SavedScenario) => void
   onReset: () => void
+  onJiraSync?: (projects: PlanningProject[]) => void
 }
 
-export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, onReset }: ScenarioBarProps) {
+export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, onReset, onJiraSync }: ScenarioBarProps) {
   const [name, setName] = useState('')
   const [flash, setFlash] = useState(false)
   const [scenarios, setScenarios] = useState<SavedScenario[]>([])
@@ -28,10 +31,12 @@ export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, on
   const [baseline, setBaseline] = useState<BaselineStatus | null>(null)
   const [locking, setLocking] = useState(false)
   const [lockFlash, setLockFlash] = useState('')
+  const [syncStage, setSyncStage] = useState<SyncStage>(null)
+  const [syncFlash, setSyncFlash] = useState('')
+  const [syncError, setSyncError] = useState('')
 
   useEffect(() => {
     setScenarios(listScenarios())
-    // Load baseline status
     fetch('/api/plan').then(r => r.json()).then(d => {
       if (d.baseline) setBaseline(d.baseline)
     }).catch(() => {})
@@ -52,6 +57,55 @@ export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, on
       setTimeout(() => setLockFlash(''), 3000)
     } finally {
       setLocking(false)
+    }
+  }
+
+  async function handleSyncJira() {
+    setSyncError('')
+    setSyncFlash('')
+
+    try {
+      // Step 1: Fetch from Jira
+      setSyncStage('sync')
+      const syncRes = await fetch('/api/jira/sync', { method: 'POST' })
+      const syncData = await syncRes.json()
+      if (!syncRes.ok || syncData.errors?.length) {
+        throw new Error(syncData.errors?.join(', ') || syncData.error || 'Jira sync failed')
+      }
+
+      // Step 2: Import snapshot → planning model
+      setSyncStage('import')
+      const importRes = await fetch('/api/planning?source=jiraSnapshot')
+      const importData = await importRes.json()
+      const jiraProjects: PlanningProject[] = importData.projects ?? []
+      if (onJiraSync) onJiraSync(jiraProjects)
+
+      // Step 3: Chunked LLM enhancement
+      setSyncStage('enhance')
+      let offset = 0
+      const limit = 5
+      let hasMore = true
+      while (hasMore) {
+        const runRes = await fetch(`/api/analysis/run?offset=${offset}&limit=${limit}`, { method: 'POST' })
+        const runData = await runRes.json()
+        hasMore = runData.chunk?.hasMore ?? false
+        offset += limit
+      }
+
+      // Step 4: Reload enhanced projects
+      const finalRes = await fetch('/api/planning?source=jiraSnapshot')
+      const finalData = await finalRes.json()
+      const enhanced: PlanningProject[] = finalData.projects ?? []
+      if (onJiraSync) onJiraSync(enhanced)
+
+      setSyncStage(null)
+      const total = enhanced.reduce((s, p) => s + p.epics.reduce((es, e) => es + e.workItems.length, 0), 0)
+      setSyncFlash(`✓ ${enhanced.length} initiatives, ${total} work items loaded`)
+      setTimeout(() => setSyncFlash(''), 5000)
+    } catch (err) {
+      setSyncStage(null)
+      setSyncError(err instanceof Error ? err.message : 'Sync failed')
+      setTimeout(() => setSyncError(''), 5000)
     }
   }
 
@@ -83,6 +137,12 @@ export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, on
     const scenario = getScenario(selectedId)
     if (scenario) onLoad(scenario)
   }
+
+  const syncLabel =
+    syncStage === 'sync' ? 'Fetching Jira…' :
+    syncStage === 'import' ? 'Importing…' :
+    syncStage === 'enhance' ? 'Enhancing…' :
+    syncFlash || 'Sync Jira'
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg bg-white border border-gray-200 px-4 py-2.5 text-sm">
@@ -142,7 +202,36 @@ export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, on
 
       <span className="text-gray-200">|</span>
 
-      {/* Lock Plan (Standard Template) */}
+      {/* Sync Jira */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleSyncJira}
+          disabled={syncStage !== null}
+          className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+            syncFlash
+              ? 'bg-green-600 text-white'
+              : syncStage !== null
+              ? 'bg-orange-400 text-white cursor-wait'
+              : 'bg-[#f28c28] text-white hover:bg-[#e07d20]'
+          } disabled:opacity-80`}
+          title="Sync issues from both Jira workspaces, enhance all items, and load into dashboard"
+        >
+          {syncStage !== null ? (
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              {syncLabel}
+            </span>
+          ) : syncLabel}
+        </button>
+        {syncError && <span className="text-[10px] text-red-500">{syncError}</span>}
+        {dataMode === 'jiraSnapshot' && !syncStage && !syncError && (
+          <span className="text-[10px] text-green-600">● Jira live</span>
+        )}
+      </div>
+
+      <span className="text-gray-200">|</span>
+
+      {/* Lock Plan */}
       <div className="flex items-center gap-2">
         <button
           onClick={handleLockPlan}

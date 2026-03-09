@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
   const initiatives: InitiativeAnalysis[] = []
   const errors: string[] = []
 
-  let analyzed = 0
+  let analyzed = 0 // tracks per-loop count (included in response)
   let tasksSuggested = 0
 
   // Apply chunking: filter eligible projects, then slice by offset/limit
@@ -203,6 +203,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     analyzedAt,
+    analyzed,
     initiativesAnalyzed: initiatives.length,
     tasksSuggested,
     tasksAdded: totalTasksAdded,

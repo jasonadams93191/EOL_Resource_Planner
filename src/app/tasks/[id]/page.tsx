@@ -11,8 +11,8 @@ import type { PlanningWorkItem, PlanningEpic, PlanningProject } from '@/types/pl
 
 type FindResult = { wi: PlanningWorkItem; epic: PlanningEpic; project: PlanningProject }
 
-function findWorkItem(id: string): FindResult | null {
-  for (const p of mockAllPlanningProjects) {
+function findWorkItem(id: string, projects: PlanningProject[]): FindResult | null {
+  for (const p of projects) {
     for (const e of p.epics) {
       const wi = e.workItems.find((w) => w.id === id)
       if (wi) return { wi, epic: e, project: p }
@@ -32,10 +32,18 @@ const STATUS_STYLES: Record<string, string> = {
 export default function TaskRecordPage() {
   const params = useParams()
   const [result, setResult] = useState<FindResult | null | 'loading'>('loading')
+  const [allProjects, setAllProjects] = useState<PlanningProject[]>(mockAllPlanningProjects)
 
   useEffect(() => {
     const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''
-    setResult(findWorkItem(id))
+    fetch('/api/planning')
+      .then(r => r.json())
+      .then(data => {
+        const projs = data.projects ?? []
+        setAllProjects(projs.length > 0 ? projs : mockAllPlanningProjects)
+        setResult(findWorkItem(id, projs.length > 0 ? projs : mockAllPlanningProjects))
+      })
+      .catch(() => setResult(findWorkItem(id, mockAllPlanningProjects)))
   }, [params.id])
 
   if (result === 'loading') return null
@@ -67,7 +75,7 @@ export default function TaskRecordPage() {
 
   // Dependency work items
   const depItems = (wi.dependsOnWorkItemIds ?? []).map((depId) => {
-    const found = findWorkItem(depId)
+    const found = findWorkItem(depId, allProjects)
     return found ? { id: depId, title: found.wi.title } : { id: depId, title: depId }
   })
 

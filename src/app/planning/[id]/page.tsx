@@ -1,10 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { TEAM_MEMBERS, SKILLS } from '@/lib/mock/team-data'
 import { buildSprintRoadmap } from '@/lib/planning/sprint-engine'
+import type { SprintRoadmap } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
 import { recommendAcceleration } from '@/lib/planning/acceleration-engine'
 import { getInitiativeWarnings, epicReadiness, workItemReadiness } from '@/lib/planning/readiness-engine'
@@ -16,6 +18,8 @@ import {
   PLANNING_TYPE_STYLES,
   ESTIMATE_READINESS_LABELS,
   ESTIMATE_READINESS_STYLES,
+  BLOCKER_TYPE_LABELS,
+  BLOCKER_TYPE_ICONS,
 } from '@/types/planning'
 import type {
   PlanningProject,
@@ -24,13 +28,13 @@ import type {
   PlanningType,
   PlanningWorkItem,
   PlanningEpic,
+  ProjectBlocker,
+  BlockerType,
 } from '@/types/planning'
 
 // ── Constants ─────────────────────────────────────────────────
 
 const START_DATE = '2026-03-09'
-
-const roadmap = buildSprintRoadmap(mockAllPlanningProjects, TEAM_MEMBERS, START_DATE)
 
 // Suppress unused import warning — analyzeBottlenecks is imported per spec
 void analyzeBottlenecks
@@ -93,10 +97,12 @@ function WorkItemRow({
   item,
   localOverride,
   onOverrideChange,
+  roadmap,
 }: {
   item: PlanningWorkItem
   localOverride: LocalOverride
   onOverrideChange: (updates: LocalOverride) => void
+  roadmap: SprintRoadmap
 }) {
   const placement = roadmap.workItemPlacements.find((p) => p.workItemId === item.id)
   const assignedMemberId = localOverride.assigneeId ?? placement?.assignedTeamMemberId ?? item.assigneeId
@@ -292,10 +298,12 @@ function EpicPanel({
   epic,
   localOverrides,
   onOverrideChange,
+  roadmap,
 }: {
   epic: import('@/types/planning').PlanningEpic
   localOverrides: Record<string, LocalOverride>
   onOverrideChange: (itemId: string, updates: LocalOverride) => void
+  roadmap: SprintRoadmap
 }) {
   const [open, setOpen] = useState(true)
   const readiness = epicReadiness(epic)
@@ -358,6 +366,7 @@ function EpicPanel({
                     item={item}
                     localOverride={localOverrides[item.id] ?? {}}
                     onOverrideChange={(updates) => onOverrideChange(item.id, updates)}
+                    roadmap={roadmap}
                   />
                 ))}
               </tbody>
@@ -371,19 +380,59 @@ function EpicPanel({
 
 // ── Page ──────────────────────────────────────────────────────
 
-export default function InitiativePage({ params }: { params: { id: string } }) {
-  const project: PlanningProject | undefined = mockAllPlanningProjects.find((p) => p.id === params.id)
+export default function InitiativePage() {
+  const params = useParams()
+  const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''
 
-  // Local editable state
-  const [priority, setPriority] = useState<PlanningPriority>(project?.priority ?? 'medium')
-  const [priorityRank, setPriorityRank] = useState<number | undefined>(project?.priorityRank)
-  const [stage, setStage] = useState<ProjectStage>(project?.stage ?? 'backlog')
-  const [planningType, setPlanningType] = useState<PlanningType | undefined>(project?.planningType)
-  const [owner, setOwner] = useState<string | undefined>(project?.owner)
+  // Fetch live projects from API (supports both seed and Jira-synced data)
+  const [allProjects, setAllProjects] = useState<PlanningProject[] | null>(null)
+  useEffect(() => {
+    fetch('/api/planning')
+      .then(r => r.json())
+      .then(data => setAllProjects(data.projects ?? mockAllPlanningProjects))
+      .catch(() => setAllProjects(mockAllPlanningProjects))
+  }, [])
+
+  const project = allProjects?.find((p) => p.id === id)
+  const roadmap = useMemo(
+    () => buildSprintRoadmap(allProjects ?? mockAllPlanningProjects, TEAM_MEMBERS, START_DATE),
+    [allProjects]
+  )
+
+  // Local editable state — initialize once project is loaded
+  const [priority, setPriority] = useState<PlanningPriority>('medium')
+  const [priorityRank, setPriorityRank] = useState<number | undefined>(undefined)
+  const [stage, setStage] = useState<ProjectStage>('backlog')
+  const [planningType, setPlanningType] = useState<PlanningType | undefined>(undefined)
+  const [owner, setOwner] = useState<string | undefined>(undefined)
   const [localOverrides, setLocalOverrides] = useState<Record<string, LocalOverride>>({})
   const [localEpics, setLocalEpics] = useState<PlanningEpic[]>([])
   const [addingEpic, setAddingEpic] = useState(false)
   const [newEpicTitle, setNewEpicTitle] = useState('')
+  // Jira sync state
+  const [syncing, setSyncing] = useState(false)
+  const [syncFlash, setSyncFlash] = useState('')
+  const [syncError, setSyncError] = useState('')
+  // Blockers
+  const [blockers, setBlockers] = useState<ProjectBlocker[]>([])
+  const [addingBlocker, setAddingBlocker] = useState(false)
+  const [newBlocker, setNewBlocker] = useState<{
+    type: BlockerType; title: string; description: string;
+    minDays: number; maxDays: number; startAfterDate: string; resolutionDate: string;
+  }>({ type: 'vendor', title: '', description: '', minDays: 60, maxDays: 90, startAfterDate: '', resolutionDate: '' })
+
+  // Initialize local fields when project loads
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (project) {
+      setPriority(project.priority ?? 'medium')
+      setPriorityRank(project.priorityRank)
+      setStage(project.stage ?? 'backlog')
+      setPlanningType(project.planningType)
+      setOwner(project.owner)
+      setBlockers(project.blockers ?? [])
+    }
+  }, [project?.id]) // intentional: only re-init when the project ID changes
 
   function handleAddEpic() {
     const title = newEpicTitle.trim()
@@ -402,6 +451,46 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
     setAddingEpic(false)
   }
 
+  async function handleSyncInitiative() {
+    if (!project || syncing) return
+    setSyncing(true)
+    setSyncError('')
+    try {
+      const res = await fetch('/api/jira/sync/initiative', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initiativeId: project.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Sync failed')
+      setSyncFlash(`✓ ${data.added} added, ${data.updated} updated`)
+      setTimeout(() => setSyncFlash(''), 4000)
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : 'Sync failed')
+      setTimeout(() => setSyncError(''), 5000)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  function handleAddBlocker() {
+    const title = newBlocker.title.trim()
+    if (!title) return
+    const blocker: ProjectBlocker = {
+      id: `blk-${Date.now()}`,
+      type: newBlocker.type,
+      title,
+      description: newBlocker.description.trim() || undefined,
+      minDays: (newBlocker.type === 'vendor' || newBlocker.type === 'dependency') ? newBlocker.minDays : undefined,
+      maxDays: (newBlocker.type === 'vendor' || newBlocker.type === 'dependency') ? Math.max(newBlocker.minDays, newBlocker.maxDays) : undefined,
+      startAfterDate: newBlocker.startAfterDate || undefined,
+      resolutionDate: newBlocker.resolutionDate || undefined,
+    }
+    setBlockers((prev) => [...prev, blocker])
+    setNewBlocker({ type: 'vendor', title: '', description: '', minDays: 60, maxDays: 90, startAfterDate: '', resolutionDate: '' })
+    setAddingBlocker(false)
+  }
+
   function handleItemOverride(itemId: string, updates: LocalOverride) {
     setLocalOverrides((prev) => ({
       ...prev,
@@ -409,11 +498,15 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
     }))
   }
 
+  if (allProjects === null) {
+    return <div className="text-center py-20 text-gray-400 text-sm">Loading…</div>
+  }
+
   if (!project) {
     return (
       <div className="text-center py-20">
         <p className="text-gray-500 mb-4">Initiative not found.</p>
-        <Link href="/planning" className="text-indigo-600 hover:underline">← Back to Planning</Link>
+        <Link href="/" className="text-indigo-600 hover:underline">← Dashboard</Link>
       </div>
     )
   }
@@ -440,14 +533,34 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
         : 'partial'
 
   // Acceleration recommendation
-  const acceleration = recommendAcceleration(project, mockAllPlanningProjects, TEAM_MEMBERS, START_DATE)
+  const acceleration = recommendAcceleration(project, allProjects ?? mockAllPlanningProjects, TEAM_MEMBERS, START_DATE)
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Back link + breadcrumb */}
-      <div>
-        <Link href="/planning" className="text-sm text-indigo-600 hover:underline">← Back to Planning</Link>
-        <div className="text-xs text-gray-400 mt-1">Portfolio / {project.portfolio} / {project.name}</div>
+      <div className="flex items-center justify-between">
+        <div>
+          <Link href="/" className="text-sm text-indigo-600 hover:underline">← Dashboard</Link>
+          <div className="text-xs text-gray-400 mt-1">Portfolio / {project.portfolio} / {project.name}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          {syncFlash && <span className="text-xs text-green-600">{syncFlash}</span>}
+          {syncError && <span className="text-xs text-red-500">{syncError}</span>}
+          <button
+            onClick={handleSyncInitiative}
+            disabled={syncing}
+            className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              syncing ? 'bg-orange-300 text-white cursor-wait' : 'bg-[#f28c28] text-white hover:bg-[#e07d20]'
+            }`}
+            title="Re-sync this initiative's issues from Jira"
+          >
+            {syncing ? (
+              <><span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Syncing…</>
+            ) : (
+              <>↻ Sync from Jira</>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Header card */}
@@ -649,6 +762,7 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
               epic={epic}
               localOverrides={localOverrides}
               onOverrideChange={handleItemOverride}
+              roadmap={roadmap}
             />
           ))
         )}
@@ -760,6 +874,131 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
           ))}
         </div>
       </details>
+
+      {/* Blockers & Dependencies */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700">Blockers &amp; Dependencies</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Vendor timelines, approvals, external dependencies, or resource constraints that affect this initiative</p>
+          </div>
+          <button
+            onClick={() => setAddingBlocker(true)}
+            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            + Add Blocker
+          </button>
+        </div>
+
+        {addingBlocker && (
+          <div className="flex flex-wrap items-end gap-3 bg-indigo-50 border border-indigo-100 rounded-lg p-3 mb-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Type *</label>
+              <select
+                value={newBlocker.type}
+                onChange={(e) => setNewBlocker((p) => ({ ...p, type: e.target.value as BlockerType }))}
+                className="text-sm border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a2e6b]"
+              >
+                {(Object.entries(BLOCKER_TYPE_LABELS) as [BlockerType, string][]).map(([val, label]) => (
+                  <option key={val} value={val}>{BLOCKER_TYPE_ICONS[val]} {label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Title *</label>
+              <input
+                autoFocus
+                type="text"
+                value={newBlocker.title}
+                onChange={(e) => setNewBlocker((p) => ({ ...p, title: e.target.value }))}
+                placeholder={newBlocker.type === 'vendor' ? 'e.g. RingCentral integration' : 'e.g. Legal review'}
+                className="text-sm border border-gray-200 rounded px-2 py-1 w-48 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a2e6b]"
+              />
+            </div>
+            {(newBlocker.type === 'vendor' || newBlocker.type === 'dependency') && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-gray-500">Min days</label>
+                  <input type="number" min={1} value={newBlocker.minDays}
+                    onChange={(e) => setNewBlocker((p) => ({ ...p, minDays: parseInt(e.target.value) || 1 }))}
+                    className="text-sm border border-gray-200 rounded px-2 py-1 w-20 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a2e6b]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-gray-500">Max days</label>
+                  <input type="number" min={1} value={newBlocker.maxDays}
+                    onChange={(e) => setNewBlocker((p) => ({ ...p, maxDays: parseInt(e.target.value) || 1 }))}
+                    className="text-sm border border-gray-200 rounded px-2 py-1 w-20 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a2e6b]"
+                  />
+                </div>
+              </>
+            )}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Starts after</label>
+              <input type="date" value={newBlocker.startAfterDate}
+                onChange={(e) => setNewBlocker((p) => ({ ...p, startAfterDate: e.target.value }))}
+                className="text-sm border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a2e6b]"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Est. resolution</label>
+              <input type="date" value={newBlocker.resolutionDate}
+                onChange={(e) => setNewBlocker((p) => ({ ...p, resolutionDate: e.target.value }))}
+                className="text-sm border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a2e6b]"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Note</label>
+              <input type="text" value={newBlocker.description}
+                onChange={(e) => setNewBlocker((p) => ({ ...p, description: e.target.value }))}
+                placeholder="Optional description…"
+                className="text-sm border border-gray-200 rounded px-2 py-1 w-48 bg-white focus:outline-none focus:ring-2 focus:ring-[#1a2e6b]"
+              />
+            </div>
+            <button onClick={handleAddBlocker}
+              className="text-sm bg-[#f28c28] text-white rounded px-3 py-1.5 hover:bg-[#d97a20] font-medium">
+              Add
+            </button>
+            <button onClick={() => setAddingBlocker(false)} className="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
+          </div>
+        )}
+
+        {blockers.length === 0 ? (
+          <p className="text-sm text-gray-400">No blockers or dependencies defined.</p>
+        ) : (
+          <div className="space-y-2">
+            {blockers.map((blk) => (
+              <div key={blk.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-base">{BLOCKER_TYPE_ICONS[blk.type]}</span>
+                  <div>
+                    <span className="text-xs rounded px-1.5 py-0.5 bg-gray-200 text-gray-600 mr-2">{BLOCKER_TYPE_LABELS[blk.type]}</span>
+                    <span className="text-sm font-medium text-gray-800">{blk.title}</span>
+                    {blk.minDays !== undefined && blk.maxDays !== undefined && (
+                      <span className="text-sm text-gray-500 ml-2">— {blk.minDays}–{blk.maxDays} days</span>
+                    )}
+                    {blk.resolutionDate && (
+                      <span className="text-xs text-green-600 ml-2">resolves {blk.resolutionDate}</span>
+                    )}
+                    {blk.startAfterDate && (
+                      <span className="text-xs text-gray-400 ml-2">after {blk.startAfterDate}</span>
+                    )}
+                    {blk.description && (
+                      <span className="text-xs text-gray-400 ml-2 italic">{blk.description}</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setBlockers((prev) => prev.filter((b) => b.id !== blk.id))}
+                  className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Source refs */}
       <div className="bg-white border border-gray-200 rounded-lg p-5">

@@ -6,9 +6,11 @@ import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
 import { buildSprintRoadmap, priorityWeight } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
+import { computeRealityScore } from '@/lib/planning/reality-score-engine'
 import { ScenarioBar } from '@/components/ScenarioBar'
 import { PortfolioView } from '@/components/planning/PortfolioView'
 import { TimelineView } from '@/components/TimelineView'
+import { RealityScoreWidget } from '@/components/RealityScoreWidget'
 import type { PlanningProject, TeamMember } from '@/types/planning'
 import type { SavedScenario } from '@/lib/planning/scenario-store'
 import type { DataSourceMode } from '@/lib/planning/data-source-mode'
@@ -19,7 +21,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<PlanningProject[]>(mockAllPlanningProjects)
   const [members, setMembers] = useState<TeamMember[]>(TEAM_MEMBERS)
   const [startDate] = useState(START_DATE)
-  const [dataMode] = useState<DataSourceMode>('seed')
+  const [dataMode, setDataMode] = useState<DataSourceMode>('seed')
   const [viewMode, setViewMode] = useState<'plan' | 'timeline'>('plan')
   const [targetDates, setTargetDates] = useState<Record<string, string>>({})
 
@@ -69,10 +71,16 @@ export default function DashboardPage() {
     )
   }
 
+  function handleJiraSync(jiraProjects: PlanningProject[]) {
+    setProjects(jiraProjects)
+    setDataMode('jiraSnapshot')
+  }
+
   function reset() {
     setProjects(mockAllPlanningProjects)
     setMembers(TEAM_MEMBERS)
     setTargetDates({})
+    setDataMode('seed')
   }
 
   function setTargetDate(projectId: string, date: string | null) {
@@ -83,6 +91,11 @@ export default function DashboardPage() {
       return next
     })
   }
+
+  const realityScore = useMemo(
+    () => computeRealityScore(projects, members, SKILLS, roadmap, bottlenecks.personBottlenecks),
+    [projects, members, roadmap, bottlenecks]
+  )
 
   const criticalBottlenecks = bottlenecks.personBottlenecks.filter((b) => b.overloadedSprints.length > 1)
   const activeMembers = members.filter((m) => m.isActive)
@@ -97,7 +110,11 @@ export default function DashboardPage() {
         dataMode={dataMode}
         onLoad={applyScenario}
         onReset={reset}
+        onJiraSync={handleJiraSync}
       />
+
+      {/* Reality Score */}
+      <RealityScoreWidget score={realityScore} />
 
       {/* Bottleneck alerts */}
       {criticalBottlenecks.length > 0 && (

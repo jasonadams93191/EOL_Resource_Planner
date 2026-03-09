@@ -9,8 +9,8 @@ import { getSourceKind, SOURCE_BADGE_STYLES, SOURCE_BADGE_LABELS } from '@/lib/p
 import type { PlanningEpic, PlanningProject, PlanningWorkItem } from '@/types/planning'
 import { ResourceType } from '@/types/domain'
 
-function findEpic(id: string): { epic: PlanningEpic; project: PlanningProject } | null {
-  for (const p of mockAllPlanningProjects) {
+function findEpic(id: string, projects: PlanningProject[]): { epic: PlanningEpic; project: PlanningProject } | null {
+  for (const p of projects) {
     const e = p.epics.find((ep) => ep.id === id)
     if (e) return { epic: e, project: p }
   }
@@ -56,7 +56,10 @@ export default function EpicRecordPage() {
 
   useEffect(() => {
     const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''
-    setResult(findEpic(id))
+    fetch('/api/planning')
+      .then(r => r.json())
+      .then(data => setResult(findEpic(id, data.projects ?? [])))
+      .catch(() => setResult(findEpic(id, mockAllPlanningProjects)))
   }, [params.id])
 
   if (result === 'loading') return null

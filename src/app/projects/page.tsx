@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { ObjectTypeFilter, type ObjectType, type PortfolioFilter, type SourceFilter } from '@/components/ObjectTypeFilter'
@@ -27,14 +27,14 @@ const STATUS_STYLES: Record<string, string> = {
 type FlatEpic = PlanningEpic & { project: PlanningProject }
 type FlatTask = PlanningWorkItem & { epic: PlanningEpic; project: PlanningProject }
 
-function allEpics(): FlatEpic[] {
-  return mockAllPlanningProjects.flatMap((p) =>
+function flatEpics(projects: PlanningProject[]): FlatEpic[] {
+  return projects.flatMap((p) =>
     p.epics.map((e) => ({ ...e, project: p }))
   )
 }
 
-function allTasks(): FlatTask[] {
-  return mockAllPlanningProjects.flatMap((p) =>
+function flatTasks(projects: PlanningProject[]): FlatTask[] {
+  return projects.flatMap((p) =>
     p.epics.flatMap((e) =>
       e.workItems.map((w) => ({ ...w, epic: e, project: p }))
     )
@@ -46,10 +46,18 @@ export default function ProjectsPage() {
   const [portfolio, setPortfolio] = useState<PortfolioFilter>('all')
   const [source, setSource] = useState<SourceFilter>('all')
   const [search, setSearch] = useState('')
+  const [allProjects, setAllProjects] = useState<PlanningProject[]>(mockAllPlanningProjects)
+
+  useEffect(() => {
+    fetch('/api/planning')
+      .then(r => r.json())
+      .then(data => { if (data.projects) setAllProjects(data.projects) })
+      .catch(() => {/* keep mock fallback */})
+  }, [])
 
   // ── Initiatives ──────────────────────────────────────────────
 
-  const initiatives = mockAllPlanningProjects.filter((p) => {
+  const initiatives = allProjects.filter((p) => {
     if (portfolio !== 'all' && p.portfolio !== portfolio) return false
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
     return true
@@ -57,7 +65,7 @@ export default function ProjectsPage() {
 
   // ── Epics ────────────────────────────────────────────────────
 
-  const epics = allEpics().filter((e) => {
+  const epics = flatEpics(allProjects).filter((e) => {
     if (portfolio !== 'all' && e.portfolio !== portfolio) return false
     if (search && !e.title.toLowerCase().includes(search.toLowerCase())) return false
     return true
@@ -65,7 +73,7 @@ export default function ProjectsPage() {
 
   // ── Tasks ────────────────────────────────────────────────────
 
-  const tasks = allTasks().filter((w) => {
+  const tasks = flatTasks(allProjects).filter((w) => {
     if (portfolio !== 'all' && w.epic.portfolio !== portfolio) return false
     if (source !== 'all') {
       const kind = getSourceKind(w.id, !!w.jira?.issueKey)

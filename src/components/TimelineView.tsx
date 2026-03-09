@@ -9,6 +9,7 @@ import type { PersonBottleneck } from '@/lib/planning/bottleneck-engine'
 // ── Types ─────────────────────────────────────────────────────
 
 type FilterLevel = 'initiatives' | 'epics' | 'tasks'
+type Granularity = 'weekly' | 'monthly' | 'quarterly'
 
 interface TimelineRow {
   id: string
@@ -16,15 +17,24 @@ interface TimelineRow {
   type: 'initiative' | 'epic' | 'task'
   href: string
   indent: number
-  startSprint: number
-  endSprint: number
   startDate: string
   endDate: string
   hours?: number
   assigneeName?: string
   status?: string
   isOverflow?: boolean
-  isProjected?: boolean   // unassigned item shown in projected sprint
+  isProjected?: boolean
+  blockerCount?: number  // number of blockers on this initiative (shown as badge)
+}
+
+interface TimeColumn {
+  key: string
+  label: string      // "Mar 9–15" | "March 2026" | "Q1 2026"
+  subLabel: string   // sprint numbers: "S1 S2"
+  startDate: string
+  endDate: string
+  isProjected: boolean
+  isOverloaded: boolean
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -35,12 +45,140 @@ function addDays(isoDate: string, days: number): string {
   return d.toISOString().split('T')[0]
 }
 
-function fmtDate(iso: string): string {
-  return iso.slice(5).replace('-', '/')
+function fmtShort(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', timeZone: 'UTC',
+  })
 }
 
-function fmtDateFull(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+function fmtMonth(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', {
+    month: 'long', year: 'numeric', timeZone: 'UTC',
+  })
+}
+
+function fmtQuarter(iso: string): string {
+  const d = new Date(iso + 'T00:00:00Z')
+  const q = Math.ceil((d.getUTCMonth() + 1) / 3)
+  return `Q${q} ${d.getUTCFullYear()}`
+}
+
+function startOfMonth(iso: string): string {
+  return iso.slice(0, 7) + '-01'
+}
+
+function endOfMonth(iso: string): string {
+  const [y, m] = iso.split('-').map(Number)
+  const last = new Date(Date.UTC(y, m, 0)) // day 0 of next month = last day of this month
+  return last.toISOString().split('T')[0]
+}
+
+function addMonths(iso: string, n: number): string {
+  const [y, m] = iso.split('-').map(Number)
+  const d = new Date(Date.UTC(y, m - 1 + n, 1))
+  return d.toISOString().split('T')[0]
+}
+
+function quarterStart(iso: string): string {
+  const [y, m] = iso.split('-').map(Number)
+  const q = Math.floor((m - 1) / 3)
+  return `${y}-${String(q * 3 + 1).padStart(2, '0')}-01`
+}
+
+function overlaps(colStart: string, colEnd: string, rowStart: string, rowEnd: string): boolean {
+  return colStart <= rowEnd && colEnd >= rowStart
+}
+
+// ── Column builder ─────────────────────────────────────────────
+
+const PAGE_SIZE: Record<Granularity, number> = {
+  weekly: 16,
+  monthly: 8,
+  quarterly: 6,
+}
+
+const COL_WIDTH: Record<Granularity, number> = {
+  weekly: 80,
+  monthly: 110,
+  quarterly: 130,
+}
+
+function buildColumns(
+  allSprints: SprintDetail[],
+  projectedNums: Set<number>,
+  overloadedNums: Set<number>,
+  granularity: Granularity
+): TimeColumn[] {
+  if (allSprints.length === 0) return []
+
+  const rangeStart = allSprints[0].startDate
+  const rangeEnd = allSprints[allSprints.length - 1].endDate
+  const cols: TimeColumn[] = []
+
+  if (granularity === 'weekly') {
+    let cursor = rangeStart
+    while (cursor <= rangeEnd) {
+      const colStart = cursor
+      const colEnd = addDays(cursor, 6)
+      const sprintsInCol = allSprints.filter(
+        (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
+      )
+      const subLabel = sprintsInCol.map((s) => `S${s.number}`).join(' ')
+      cols.push({
+        key: colStart,
+        label: `${fmtShort(colStart)}–${fmtShort(colEnd)}`,
+        subLabel,
+        startDate: colStart,
+        endDate: colEnd,
+        isProjected: sprintsInCol.every((s) => projectedNums.has(s.number)),
+        isOverloaded: sprintsInCol.some((s) => overloadedNums.has(s.number)),
+      })
+      cursor = addDays(cursor, 7)
+    }
+  } else if (granularity === 'monthly') {
+    let cursor = startOfMonth(rangeStart)
+    while (cursor <= rangeEnd) {
+      const colStart = cursor
+      const colEnd = endOfMonth(cursor)
+      const sprintsInCol = allSprints.filter(
+        (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
+      )
+      const subLabel = sprintsInCol.map((s) => `S${s.number}`).join(' ')
+      cols.push({
+        key: colStart,
+        label: fmtMonth(colStart),
+        subLabel,
+        startDate: colStart,
+        endDate: colEnd,
+        isProjected: sprintsInCol.length > 0 && sprintsInCol.every((s) => projectedNums.has(s.number)),
+        isOverloaded: sprintsInCol.some((s) => overloadedNums.has(s.number)),
+      })
+      cursor = addMonths(cursor, 1)
+    }
+  } else {
+    // quarterly
+    let cursor = quarterStart(rangeStart)
+    while (cursor <= rangeEnd) {
+      const colStart = cursor
+      const colEnd = endOfMonth(addMonths(cursor, 2))
+      const sprintsInCol = allSprints.filter(
+        (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
+      )
+      const subLabel = sprintsInCol.map((s) => `S${s.number}`).join(' ')
+      cols.push({
+        key: colStart,
+        label: fmtQuarter(colStart),
+        subLabel,
+        startDate: colStart,
+        endDate: colEnd,
+        isProjected: sprintsInCol.length > 0 && sprintsInCol.every((s) => projectedNums.has(s.number)),
+        isOverloaded: sprintsInCol.some((s) => overloadedNums.has(s.number)),
+      })
+      cursor = addMonths(cursor, 3)
+    }
+  }
+
+  return cols
 }
 
 // ── Bar colours ───────────────────────────────────────────────
@@ -73,59 +211,70 @@ function RowLabel({ row }: { row: TimelineRow }) {
         <Link href={row.href} className="truncate hover:underline text-gray-800 hover:text-[#1a2e6b] min-w-0">
           {row.title}
         </Link>
-        {row.isProjected && <span className="text-[10px] text-orange-500 shrink-0" title="Unassigned — projected placement">~</span>}
+        {(row.blockerCount ?? 0) > 0 && (
+          <span title={`${row.blockerCount} blocker(s)`} className="text-[9px] bg-red-100 text-red-600 rounded px-1 shrink-0 font-medium">
+            🚫{row.blockerCount}
+          </span>
+        )}
+        {row.isProjected && <span className="text-[10px] text-orange-500 shrink-0" title="Unassigned — projected">~</span>}
         {row.isOverflow && !row.isProjected && <span className="text-[10px] text-red-500 shrink-0" title="Could not be placed">!</span>}
       </div>
       <div className="flex items-center gap-2 mt-0.5">
-        <span className="text-[10px] text-gray-400">{fmtDateFull(row.startDate)} → {fmtDateFull(row.endDate)}</span>
+        <span className="text-[10px] text-gray-400">{fmtShort(row.startDate)} → {fmtShort(row.endDate)}</span>
         {row.hours != null && <span className="text-[10px] text-gray-400">{row.hours}h</span>}
       </div>
     </td>
   )
 }
 
-// ── Sprint Cell ───────────────────────────────────────────────
+// ── Gantt Cell ────────────────────────────────────────────────
 
-function SprintCell({
+function GanttCell({
+  col,
   row,
-  sprintNum,
-  isStart,
-  isEnd,
-  isInRange,
-  isOverloaded,
-  isProjectedSprint,
+  colWidth,
+  isTargetCol,
 }: {
+  col: TimeColumn
   row: TimelineRow
-  sprintNum: number
-  isStart: boolean
-  isEnd: boolean
-  isInRange: boolean
-  isOverloaded: boolean
-  isProjectedSprint: boolean
+  colWidth: number
+  isTargetCol: boolean
 }) {
+  const inRange = overlaps(col.startDate, col.endDate, row.startDate, row.endDate)
+  const isStart = inRange && col.startDate <= row.startDate && col.endDate >= row.startDate
+  const isEnd   = inRange && col.startDate <= row.endDate   && col.endDate >= row.endDate
   const rowStyle = ROW_STYLE[row.type]
   const bar = BAR_STYLE[row.type]
 
-  if (!isInRange) {
+  const bgClass = col.isOverloaded
+    ? 'bg-red-50/40'
+    : col.isProjected
+    ? 'bg-gray-50/60'
+    : ''
+
+  if (!inRange) {
     return (
       <td
-        className={`border-r border-b border-gray-100 min-w-[80px] h-8 ${rowStyle} ${
-          isProjectedSprint ? 'bg-gray-50/50' : isOverloaded ? 'bg-red-50' : ''
-        }`}
-      />
+        className={`border-r border-b border-gray-100 h-8 ${rowStyle} ${bgClass} relative`}
+        style={{ minWidth: colWidth, width: colWidth }}
+      >
+        {isTargetCol && (
+          <div className="absolute inset-y-0 right-0 w-0.5 bg-[#f28c28] z-10" title="Target date" />
+        )}
+      </td>
     )
   }
 
-  // Projected items get an orange dashed bar
-  const barBg = row.isProjected ? 'bg-orange-100 border border-dashed border-orange-400' : bar.bg
+  const barBg = row.isProjected
+    ? 'bg-orange-100 border border-dashed border-orange-400'
+    : bar.bg
   const barText = row.isProjected ? 'text-orange-700' : bar.text
 
   return (
     <td
-      className={`border-b border-gray-100 min-w-[80px] h-8 p-0 relative ${
-        isProjectedSprint ? 'bg-gray-50/50' : isOverloaded ? 'bg-red-50/30' : ''
-      }`}
-      title={`S${sprintNum}: ${row.title}${row.isProjected ? ' (projected — unassigned)' : ''}`}
+      className={`border-b border-gray-100 h-8 p-0 relative ${bgClass}`}
+      style={{ minWidth: colWidth, width: colWidth }}
+      title={`${row.title}${row.isProjected ? ' (projected)' : ''}`}
     >
       <div
         className={`absolute inset-y-1 left-0 right-0 ${barBg} ${
@@ -138,10 +287,13 @@ function SprintCell({
           <span className={`text-[10px] ${barText} px-1.5 truncate font-medium`}>
             {row.type === 'task' && row.assigneeName
               ? `${row.assigneeName.split(' ')[0]}${row.isProjected ? ' ~' : ''}`
-              : row.title.slice(0, 16) + (row.isProjected ? ' ~' : '')}
+              : row.title.slice(0, 18) + (row.isProjected ? ' ~' : '')}
           </span>
         )}
       </div>
+      {isTargetCol && (
+        <div className="absolute inset-y-0 right-0 w-0.5 bg-[#f28c28] z-10" title="Target date" />
+      )}
     </td>
   )
 }
@@ -159,8 +311,10 @@ interface TimelineViewProps {
 export function TimelineView({ projects, members, roadmap, personBottlenecks, targetDates }: TimelineViewProps) {
   const [filter, setFilter] = useState<FilterLevel>('epics')
   const [searchText, setSearchText] = useState('')
+  const [granularity, setGranularity] = useState<Granularity>('monthly')
+  const [pageIndex, setPageIndex] = useState(0)
 
-  const overflowSet = new Set(roadmap.overflowItems)
+  const overflowSet = useMemo(() => new Set(roadmap.overflowItems), [roadmap])
 
   // Index placements by workItemId
   const placementByItemId = useMemo(() => {
@@ -176,26 +330,20 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
     return m
   }, [members])
 
-  // Overloaded sprint numbers (from placed sprints)
+  // Overloaded sprint numbers
   const overloadedSprints = useMemo(() => {
     const set = new Set<number>()
-    for (const sp of roadmap.sprints) {
-      if (sp.isOverloaded) set.add(sp.number)
-    }
+    for (const sp of roadmap.sprints) { if (sp.isOverloaded) set.add(sp.number) }
     return set
   }, [roadmap])
 
   // ── Overflow projections ──────────────────────────────────────
-  // For items that couldn't be placed (overflow), project them into
-  // additional "virtual" sprints so the timeline still shows them.
   const { overflowProjections, projectedSprints } = useMemo(() => {
     const projections = new Map<string, number>()
-
     if (roadmap.overflowItems.length === 0) {
       return { overflowProjections: projections, projectedSprints: [] as SprintDetail[] }
     }
 
-    // Build workItemId → estimatedHours map
     const wiHours = new Map<string, number>()
     for (const p of projects) {
       for (const e of p.epics) {
@@ -203,7 +351,6 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
       }
     }
 
-    // Use roadmap capacity as the per-sprint limit for projections
     const lastExistingSprint = roadmap.sprints[roadmap.sprints.length - 1]
     const capacityPerSprint = lastExistingSprint?.totalAvailableHours ?? 40
 
@@ -221,8 +368,6 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
     }
 
     const maxProjSprint = projSprint
-
-    // Generate stub SprintDetail objects for projected sprints
     const extras: SprintDetail[] = []
     const lastEnd = lastExistingSprint?.endDate ?? roadmap.startDate
 
@@ -249,34 +394,41 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
     return { overflowProjections: projections, projectedSprints: extras }
   }, [roadmap, projects])
 
-  // All sprint columns: placed + projected
   const allSprints = useMemo(
     () => [...roadmap.sprints, ...projectedSprints],
     [roadmap.sprints, projectedSprints]
   )
 
-  // Set of projected sprint numbers (for styling the column headers)
   const projectedSprintNums = useMemo(
     () => new Set(projectedSprints.map((s) => s.number)),
     [projectedSprints]
   )
 
-  // Target date → sprint number map
-  const targetSprintByProjectId = useMemo(() => {
-    if (!targetDates) return new Map<string, number>()
-    const map = new Map<string, number>()
-    const msPerSprint = 14 * 24 * 60 * 60 * 1000
-    const startMs = new Date(roadmap.startDate).getTime()
+  // ── Build date columns ────────────────────────────────────────
+  const allColumns = useMemo(
+    () => buildColumns(allSprints, projectedSprintNums, overloadedSprints, granularity),
+    [allSprints, projectedSprintNums, overloadedSprints, granularity]
+  )
+
+  const pageSize = PAGE_SIZE[granularity]
+  const totalPages = Math.max(1, Math.ceil(allColumns.length / pageSize))
+  const safePageIndex = Math.min(pageIndex, totalPages - 1)
+  const visibleColumns = allColumns.slice(safePageIndex * pageSize, (safePageIndex + 1) * pageSize)
+  const colWidth = COL_WIDTH[granularity]
+
+  // Target date → column key that contains it
+  const targetColByProjectId = useMemo(() => {
+    if (!targetDates) return new Map<string, string>()
+    const map = new Map<string, string>()
     for (const [projectId, date] of Object.entries(targetDates)) {
       if (!date) continue
-      const diffMs = new Date(date).getTime() - startMs
-      const sprintNum = Math.max(1, Math.ceil(diffMs / msPerSprint))
-      map.set(projectId, sprintNum)
+      const col = allColumns.find((c) => c.startDate <= date && c.endDate >= date)
+      if (col) map.set(projectId, col.key)
     }
     return map
-  }, [targetDates, roadmap.startDate])
+  }, [targetDates, allColumns])
 
-  // Build all timeline rows
+  // ── Build timeline rows ───────────────────────────────────────
   const rows = useMemo<TimelineRow[]>(() => {
     const result: TimelineRow[] = []
     const query = searchText.toLowerCase()
@@ -284,28 +436,32 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
     for (const project of projects) {
       const allProjectItems = project.epics.flatMap((e) => e.workItems)
 
-      // Placed sprint numbers for this project's items
-      const placedSprints = allProjectItems
-        .map((wi) => placementByItemId.get(wi.id)?.sprintNumber)
-        .filter((n): n is number => n !== undefined)
+      const placedForProject = allProjectItems
+        .map((wi) => placementByItemId.get(wi.id))
+        .filter((p): p is WorkItemPlacement => p !== undefined)
 
-      // Projected sprint numbers for this project's overflow items
       const projectedForProject = allProjectItems
         .filter((wi) => overflowSet.has(wi.id))
-        .map((wi) => overflowProjections.get(wi.id))
-        .filter((n): n is number => n !== undefined)
+        .map((wi) => {
+          const spNum = overflowProjections.get(wi.id)
+          return spNum ? allSprints.find((s) => s.number === spNum) : undefined
+        })
+        .filter((s): s is SprintDetail => s !== undefined)
 
-      const allSprintNums = [...placedSprints, ...projectedForProject]
+      if (placedForProject.length === 0 && projectedForProject.length === 0) continue
 
-      // Skip projects with no placements at all and no overflow projections
-      if (allSprintNums.length === 0) continue
+      // Get date ranges for placed items
+      const placedSprintDetails = placedForProject
+        .map((p) => allSprints.find((s) => s.number === p.sprintNumber))
+        .filter((s): s is SprintDetail => s !== undefined)
 
-      const iniStart = Math.min(...allSprintNums)
-      const iniEnd = Math.max(...allSprintNums)
+      const allSprintDetails = [...placedSprintDetails, ...projectedForProject]
+      if (allSprintDetails.length === 0) continue
 
-      const iniStartSprint = allSprints.find((s) => s.number === iniStart)
-      const iniEndSprint = allSprints.find((s) => s.number === iniEnd)
-      if (!iniStartSprint || !iniEndSprint) continue
+      const startDate = allSprintDetails.reduce((min, s) => s.startDate < min ? s.startDate : min, allSprintDetails[0].startDate)
+      const endDate = allSprintDetails.reduce((max, s) => s.endDate > max ? s.endDate : max, allSprintDetails[0].endDate)
+
+      const blockerCount = (project.blockers?.length ?? 0) + (project.vendorBlocks?.length ?? 0)
 
       const iniRow: TimelineRow = {
         id: project.id,
@@ -313,17 +469,15 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
         type: 'initiative',
         href: `/planning/${project.id}`,
         indent: 0,
-        startSprint: iniStart,
-        endSprint: iniEnd,
-        startDate: iniStartSprint.startDate,
-        endDate: iniEndSprint.endDate,
+        startDate,
+        endDate,
         hours: allProjectItems.reduce((s, wi) => s + wi.estimatedHours, 0),
         isOverflow: false,
-        isProjected: placedSprints.length === 0, // all overflow
+        isProjected: placedForProject.length === 0,
+        blockerCount,
       }
 
       const matchesIni = !query || project.name.toLowerCase().includes(query)
-
       if (filter === 'initiatives') {
         if (matchesIni) result.push(iniRow)
         continue
@@ -332,24 +486,25 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
       result.push(iniRow)
 
       for (const epic of project.epics) {
-        const epicPlacedSprints = epic.workItems
-          .map((wi) => placementByItemId.get(wi.id)?.sprintNumber)
-          .filter((n): n is number => n !== undefined)
+        const epicPlaced = epic.workItems
+          .map((wi) => placementByItemId.get(wi.id))
+          .filter((p): p is WorkItemPlacement => p !== undefined)
+          .map((p) => allSprints.find((s) => s.number === p.sprintNumber))
+          .filter((s): s is SprintDetail => s !== undefined)
 
-        const epicProjSprints = epic.workItems
+        const epicProjected = epic.workItems
           .filter((wi) => overflowSet.has(wi.id))
-          .map((wi) => overflowProjections.get(wi.id))
-          .filter((n): n is number => n !== undefined)
+          .map((wi) => {
+            const spNum = overflowProjections.get(wi.id)
+            return spNum ? allSprints.find((s) => s.number === spNum) : undefined
+          })
+          .filter((s): s is SprintDetail => s !== undefined)
 
-        const allEpicSprints = [...epicPlacedSprints, ...epicProjSprints]
-        if (allEpicSprints.length === 0) continue
+        const epicSprints = [...epicPlaced, ...epicProjected]
+        if (epicSprints.length === 0) continue
 
-        const epicStart = Math.min(...allEpicSprints)
-        const epicEnd = Math.max(...allEpicSprints)
-
-        const epicStartSprint = allSprints.find((s) => s.number === epicStart)
-        const epicEndSprint = allSprints.find((s) => s.number === epicEnd)
-        if (!epicStartSprint || !epicEndSprint) continue
+        const eStart = epicSprints.reduce((min, s) => s.startDate < min ? s.startDate : min, epicSprints[0].startDate)
+        const eEnd = epicSprints.reduce((max, s) => s.endDate > max ? s.endDate : max, epicSprints[0].endDate)
 
         const epicRow: TimelineRow = {
           id: epic.id,
@@ -357,26 +512,23 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
           type: 'epic',
           href: `/epics/${epic.id}`,
           indent: 1,
-          startSprint: epicStart,
-          endSprint: epicEnd,
-          startDate: epicStartSprint.startDate,
-          endDate: epicEndSprint.endDate,
+          startDate: eStart,
+          endDate: eEnd,
           hours: epic.workItems.reduce((s, wi) => s + wi.estimatedHours, 0),
           isOverflow: false,
-          isProjected: epicPlacedSprints.length === 0,
+          isProjected: epicPlaced.length === 0,
         }
 
         const matchesEpic = !query || epic.title.toLowerCase().includes(query)
         if (matchesEpic || matchesIni) result.push(epicRow)
-
         if (filter !== 'tasks') continue
 
         for (const wi of epic.workItems) {
           const placement = placementByItemId.get(wi.id)
           const isOverflow = overflowSet.has(wi.id)
-          const projSprint = overflowProjections.get(wi.id)
-          const spNum = placement?.sprintNumber ?? projSprint ?? iniStart
-          const sprintInfo = allSprints.find((s) => s.number === spNum)
+          const projSpNum = overflowProjections.get(wi.id)
+          const spNum = placement?.sprintNumber ?? projSpNum
+          const sprintInfo = spNum ? allSprints.find((s) => s.number === spNum) : undefined
           if (!sprintInfo) continue
 
           const matchesTask = !query || wi.title.toLowerCase().includes(query)
@@ -388,8 +540,6 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
             type: 'task',
             href: `/tasks/${wi.id}`,
             indent: 2,
-            startSprint: spNum,
-            endSprint: spNum,
             startDate: sprintInfo.startDate,
             endDate: sprintInfo.endDate,
             hours: wi.estimatedHours,
@@ -398,7 +548,7 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
               : undefined,
             status: wi.status,
             isOverflow,
-            isProjected: isOverflow && projSprint !== undefined,
+            isProjected: isOverflow && projSpNum !== undefined,
           })
         }
       }
@@ -406,13 +556,16 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
     return result
   }, [projects, filter, searchText, placementByItemId, memberById, overflowSet, overflowProjections, allSprints])
 
-  // Stats
   const overloadCount = overloadedSprints.size
   const overflowCount = roadmap.overflowItems.length
 
+  // Date range summary for current page
+  const pageStart = visibleColumns[0]?.startDate
+  const pageEnd = visibleColumns[visibleColumns.length - 1]?.endDate
+
   return (
     <div className="space-y-3">
-      {/* Controls */}
+      {/* Controls row 1: filter + search + alerts */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden text-xs">
           {(['initiatives', 'epics', 'tasks'] as FilterLevel[]).map((lvl) => (
@@ -436,18 +589,62 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
           className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs w-44 focus:outline-none focus:ring-2 focus:ring-[#1a2e6b]"
         />
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
           {overloadCount > 0 && (
             <span className="text-xs rounded-full bg-red-100 text-red-700 px-2.5 py-1 font-medium">
               {overloadCount} sprint{overloadCount !== 1 ? 's' : ''} overloaded
             </span>
           )}
           {overflowCount > 0 && (
-            <span className="text-xs rounded-full bg-orange-100 text-orange-700 px-2.5 py-1 font-medium" title="Team is at capacity. To schedule these: add a resource, change a target date, or remove scope.">
-              {overflowCount} over capacity — add resource / adjust target / remove scope
+            <span className="text-xs rounded-full bg-orange-100 text-orange-700 px-2.5 py-1 font-medium" title="Add resource / adjust target / remove scope">
+              {overflowCount} over capacity
             </span>
           )}
-          <span className="text-xs text-gray-400">{rows.length} rows · {allSprints.length} sprints</span>
+          <span className="text-xs text-gray-400">{rows.length} rows</span>
+        </div>
+      </div>
+
+      {/* Controls row 2: granularity + pagination */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Granularity */}
+        <div className="flex items-center rounded-lg border border-gray-200 bg-white overflow-hidden text-xs">
+          {(['weekly', 'monthly', 'quarterly'] as Granularity[]).map((g) => (
+            <button
+              key={g}
+              onClick={() => { setGranularity(g); setPageIndex(0) }}
+              className={`px-3 py-1.5 font-medium capitalize transition-colors ${
+                granularity === g ? 'bg-indigo-100 text-[#1a2e6b]' : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+
+        {/* Pagination */}
+        <div className="flex items-center gap-2 text-xs">
+          <button
+            onClick={() => setPageIndex((i) => Math.max(0, i - 1))}
+            disabled={safePageIndex === 0}
+            className="px-2.5 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ← Prev
+          </button>
+          {pageStart && pageEnd && (
+            <span className="text-gray-500 min-w-[160px] text-center">
+              {fmtShort(pageStart)} – {fmtShort(pageEnd)}
+            </span>
+          )}
+          <button
+            onClick={() => setPageIndex((i) => Math.min(totalPages - 1, i + 1))}
+            disabled={safePageIndex >= totalPages - 1}
+            className="px-2.5 py-1 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Next →
+          </button>
+          <span className="text-gray-400">
+            Page {safePageIndex + 1} / {totalPages}
+          </span>
         </div>
       </div>
 
@@ -456,11 +653,12 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#1a2e6b] inline-block" /> Initiative</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" /> Epic</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-indigo-200 inline-block" /> Task</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-100 border border-dashed border-orange-400 inline-block" /> Unassigned (projected ~)</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-100 border border-red-200 inline-block" /> Overloaded sprint</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-orange-100 border border-dashed border-orange-400 inline-block" /> Unassigned ~</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-100 border border-red-200 inline-block" /> Overloaded</span>
         {projectedSprints.length > 0 && (
-          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-100 border border-dashed border-gray-300 inline-block" /> Projected sprint</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-100 border border-dashed border-gray-300 inline-block" /> Projected</span>
         )}
+        <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-[#f28c28] inline-block border-t-2 border-dashed border-[#f28c28]" /> Target date</span>
       </div>
 
       {/* Gantt table */}
@@ -468,42 +666,51 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
         <table className="border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: '220px', minWidth: '220px' }} />
-            {allSprints.map((s) => (
-              <col key={s.number} style={{ width: '80px', minWidth: '80px' }} />
+            {visibleColumns.map((col) => (
+              <col key={col.key} style={{ width: `${colWidth}px`, minWidth: `${colWidth}px` }} />
             ))}
           </colgroup>
 
-          {/* Sprint header */}
+          {/* 2-row header */}
           <thead>
+            {/* Row 1: period label */}
             <tr>
-              <th className="sticky left-0 z-20 bg-[#1a2e6b] text-white px-3 py-2 text-left font-semibold border-b border-r border-[#0f1c45]">
+              <th className="sticky left-0 z-20 bg-[#1a2e6b] text-white px-3 py-2 text-left font-semibold border-b border-r border-[#0f1c45]" rowSpan={2}>
                 Initiative / Epic / Task
               </th>
-              {allSprints.map((s) => {
-                const isOver = overloadedSprints.has(s.number)
-                const isProj = projectedSprintNums.has(s.number)
-                return (
-                  <th
-                    key={s.number}
-                    className={`px-1 py-2 text-center font-semibold border-b border-r ${
-                      isOver
-                        ? 'bg-red-600 text-white border-red-700'
-                        : isProj
-                        ? 'bg-gray-400 text-white border-gray-500'
-                        : 'bg-[#1a2e6b] text-white border-[#0f1c45]'
-                    }`}
-                  >
-                    <div className="font-bold">S{s.number}</div>
-                    <div className={`text-[9px] font-normal ${
-                      isOver ? 'text-red-200' : isProj ? 'text-gray-200' : 'text-blue-200'
-                    }`}>
-                      {fmtDate(s.startDate)}
-                    </div>
-                    {isOver && <div className="text-[9px] font-bold text-red-100">⚠ OVR</div>}
-                    {isProj && <div className="text-[9px] text-gray-200">PROJ</div>}
-                  </th>
-                )
-              })}
+              {visibleColumns.map((col) => (
+                <th
+                  key={col.key}
+                  className={`px-1 py-1.5 text-center font-semibold border-b border-r text-xs ${
+                    col.isOverloaded
+                      ? 'bg-red-600 text-white border-red-700'
+                      : col.isProjected
+                      ? 'bg-gray-400 text-white border-gray-500'
+                      : 'bg-[#1a2e6b] text-white border-[#0f1c45]'
+                  }`}
+                >
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+            {/* Row 2: sprint sub-labels */}
+            <tr>
+              {visibleColumns.map((col) => (
+                <th
+                  key={col.key}
+                  className={`px-1 py-0.5 text-center border-b border-r text-[9px] font-normal ${
+                    col.isOverloaded
+                      ? 'bg-red-500 text-red-100 border-red-600'
+                      : col.isProjected
+                      ? 'bg-gray-300 text-gray-600 border-gray-400'
+                      : 'bg-[#243b85] text-blue-200 border-[#0f1c45]'
+                  }`}
+                >
+                  {col.subLabel || '—'}
+                  {col.isOverloaded && ' ⚠'}
+                  {col.isProjected && !col.isOverloaded && ' PROJ'}
+                </th>
+              ))}
             </tr>
           </thead>
 
@@ -511,43 +718,25 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={allSprints.length + 1} className="px-5 py-8 text-center text-gray-400">
+                <td colSpan={visibleColumns.length + 1} className="px-5 py-8 text-center text-gray-400">
                   No items match your filter.
                 </td>
               </tr>
             ) : (
               rows.map((row) => {
-                const targetSprint = row.type === 'initiative' ? targetSprintByProjectId.get(row.id) : undefined
+                const targetColKey = row.type === 'initiative' ? targetColByProjectId.get(row.id) : undefined
                 return (
                   <tr key={row.id} className="group hover:brightness-95 transition-all">
                     <RowLabel row={row} />
-                    {allSprints.map((s) => {
-                      const isInRange = s.number >= row.startSprint && s.number <= row.endSprint
-                      const isTargetCol = targetSprint === s.number
-                      return (
-                        <td
-                          key={s.number}
-                          className="p-0 relative"
-                          style={isTargetCol && !isInRange ? { borderLeft: '2px dashed #f28c28' } : undefined}
-                        >
-                          <SprintCell
-                            row={row}
-                            sprintNum={s.number}
-                            isStart={s.number === row.startSprint}
-                            isEnd={s.number === row.endSprint}
-                            isInRange={isInRange}
-                            isOverloaded={overloadedSprints.has(s.number)}
-                            isProjectedSprint={projectedSprintNums.has(s.number)}
-                          />
-                          {isTargetCol && (
-                            <div
-                              className="absolute inset-y-0 left-0 w-0.5 bg-[#f28c28] z-10"
-                              title={`Target date for ${row.title}`}
-                            />
-                          )}
-                        </td>
-                      )
-                    })}
+                    {visibleColumns.map((col) => (
+                      <GanttCell
+                        key={col.key}
+                        col={col}
+                        row={row}
+                        colWidth={colWidth}
+                        isTargetCol={targetColKey === col.key}
+                      />
+                    ))}
                   </tr>
                 )
               })
@@ -559,7 +748,7 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
       {/* Per-member overload detail */}
       {personBottlenecks.filter((b) => b.overloadedSprints.length > 0).length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <p className="text-xs font-semibold text-red-800 mb-2">Over-utilized Members — Dates Adjusted</p>
+          <p className="text-xs font-semibold text-red-800 mb-2">Over-utilized Members</p>
           <div className="flex flex-wrap gap-3">
             {personBottlenecks
               .filter((b) => b.overloadedSprints.length > 0)
@@ -576,7 +765,7 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
               ))}
           </div>
           <p className="text-[10px] text-red-600 mt-2">
-            Sprint assignments are automatically adjusted when members are over capacity. Add resources or reduce scope to fix.
+            Add resources or reduce scope to fix overloaded sprints.
           </p>
         </div>
       )}
