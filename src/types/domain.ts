@@ -1,19 +1,35 @@
 // ============================================================
 // AA / EOL Capacity Planner — Shared Domain Types
+//
+// This app supports exactly two Jira workspaces:
+//   - EOL Tech Team  (project key: EOL,  workspace id: ws-eol)
+//   - AA/TKO Projects (project key: ATI, workspace id: ws-ati)
+//
+// These are fixed — do not generalize to arbitrary workspaces.
 // ============================================================
 
-export interface Workspace {
-  id: string
+// Fixed workspace and project identifiers — the full set, not open strings.
+export type WorkspaceId = 'ws-eol' | 'ws-ati'
+export type ProjectKey = 'EOL' | 'ATI'
+
+// Authoritative workspace definitions (not a dynamic list).
+export interface WorkspaceDefinition {
+  id: WorkspaceId
   name: string
-  jiraBaseUrl: string
-  projectKey: string
+  projectKey: ProjectKey
+  // jiraBaseUrl is server-side config only (see src/lib/config.ts)
+}
+
+export const WORKSPACES: Record<WorkspaceId, WorkspaceDefinition> = {
+  'ws-eol': { id: 'ws-eol', name: 'EOL Tech Team', projectKey: 'EOL' },
+  'ws-ati': { id: 'ws-ati', name: 'AA/TKO Projects', projectKey: 'ATI' },
 }
 
 export interface Project {
   id: string
   name: string
   key: string
-  workspaceId: string
+  workspaceId: WorkspaceId
   status: 'active' | 'on-hold' | 'completed' | 'cancelled'
   description?: string
 }
@@ -27,7 +43,11 @@ export interface Epic {
   storyPoints?: number
 }
 
-export type IssueType = 'story' | 'bug' | 'task' | 'sub-task'
+// Issue types supported across both projects.
+// Note: EOL supports Task/Bug/Story/Epic/Sub-task.
+//       ATI additionally supports Request (client intake requests).
+// These are controlled values — do not add types without verifying in Jira.
+export type IssueType = 'story' | 'bug' | 'task' | 'sub-task' | 'request'
 export type Priority = 'highest' | 'high' | 'medium' | 'low' | 'lowest'
 export type IssueStatus = 'todo' | 'in-progress' | 'in-review' | 'done' | 'blocked'
 
@@ -36,13 +56,21 @@ export interface Issue {
   title: string
   epicId?: string
   projectId: string
-  workspaceId: string
+  workspaceId: WorkspaceId
   status: IssueStatus
   priority: Priority
   issueType: IssueType
   storyPoints?: number
   assigneeId?: string
   labels: string[]
+}
+
+// Simple mapping from Jira accountId → internal resource id.
+// Maintained as explicit config — not discovered dynamically.
+export interface JiraUserMapping {
+  jiraAccountId: string
+  resourceId: string
+  workspaceId: WorkspaceId
 }
 
 export enum ResourceType {

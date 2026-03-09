@@ -3,7 +3,6 @@
 // TODO Wave 2: replace with live Jira API data via normalized client
 // ============================================================
 import type {
-  Workspace,
   Project,
   Epic,
   Issue,
@@ -12,24 +11,38 @@ import type {
   IssueEstimate,
   ProjectSchedule,
   ScenarioResult,
+  JiraUserMapping,
+  WorkspaceDefinition,
 } from '@/types/domain'
-import { ResourceType } from '@/types/domain'
+import { ResourceType, WORKSPACES } from '@/types/domain'
 
 // ── Workspaces ──────────────────────────────────────────────
-export const mockWorkspaces: Workspace[] = [
-  {
-    id: 'ws-eol',
-    name: 'EOL Tech Team',
-    jiraBaseUrl: 'https://placeholder-eol.atlassian.net',
-    projectKey: 'EOL',
-  },
-  {
-    id: 'ws-aa',
-    name: 'AA/TKO Projects',
-    jiraBaseUrl: 'https://placeholder-aa.atlassian.net',
-    projectKey: 'AA',
-  },
+// Exactly two workspaces — use the canonical WORKSPACES constant.
+export const mockWorkspaces: WorkspaceDefinition[] = [
+  WORKSPACES['ws-eol'],
+  WORKSPACES['ws-ati'],
 ]
+
+// ── Jira User → Resource Mapping ─────────────────────────────
+// Simple explicit map from Jira accountId to internal resource id.
+// Maintained as config — not discovered dynamically.
+// TODO Wave 2: populate with real Jira account IDs from each workspace.
+export const mockUserMappings: JiraUserMapping[] = [
+  { jiraAccountId: 'jira-user-alex', resourceId: 'r-alex', workspaceId: 'ws-eol' },
+  { jiraAccountId: 'jira-user-alex-ati', resourceId: 'r-alex', workspaceId: 'ws-ati' },
+  { jiraAccountId: 'jira-user-jordan', resourceId: 'r-jordan', workspaceId: 'ws-eol' },
+  { jiraAccountId: 'jira-user-jordan-ati', resourceId: 'r-jordan', workspaceId: 'ws-ati' },
+  { jiraAccountId: 'jira-user-morgan', resourceId: 'r-morgan', workspaceId: 'ws-eol' },
+  { jiraAccountId: 'jira-user-morgan-ati', resourceId: 'r-morgan', workspaceId: 'ws-ati' },
+  { jiraAccountId: 'jira-user-casey', resourceId: 'r-casey', workspaceId: 'ws-eol' },
+  { jiraAccountId: 'jira-user-casey-ati', resourceId: 'r-casey', workspaceId: 'ws-ati' },
+]
+
+export function resolveResourceId(jiraAccountId: string, workspaceId: string): string | undefined {
+  return mockUserMappings.find(
+    (m) => m.jiraAccountId === jiraAccountId && m.workspaceId === workspaceId
+  )?.resourceId
+}
 
 // ── Shared Resource Pool ─────────────────────────────────────
 export const mockResources: Resource[] = [
@@ -91,7 +104,7 @@ export const mockProjects: Project[] = [
     id: 'proj-aa-intake',
     name: 'Attorney Intake Automation',
     key: 'AA-INTAKE',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'active',
     description: 'Automate the attorney intake and conflict-check workflow.',
   },
@@ -99,7 +112,7 @@ export const mockProjects: Project[] = [
     id: 'proj-tko-mgmt',
     name: 'TKO Matter Management',
     key: 'TKO-MGMT',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'on-hold',
     description: 'Build matter management module for TKO practice group.',
   },
@@ -364,7 +377,7 @@ export const mockIssues: Issue[] = [
     title: 'Design intake form data model',
     epicId: 'ep-007',
     projectId: 'proj-aa-intake',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'done',
     priority: 'high',
     issueType: 'task',
@@ -377,7 +390,7 @@ export const mockIssues: Issue[] = [
     title: 'Build form builder UI',
     epicId: 'ep-007',
     projectId: 'proj-aa-intake',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'in-progress',
     priority: 'high',
     issueType: 'story',
@@ -390,7 +403,7 @@ export const mockIssues: Issue[] = [
     title: 'Form submission API endpoint',
     epicId: 'ep-007',
     projectId: 'proj-aa-intake',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'in-progress',
     priority: 'high',
     issueType: 'story',
@@ -403,7 +416,7 @@ export const mockIssues: Issue[] = [
     title: 'Form validation rules engine',
     epicId: 'ep-007',
     projectId: 'proj-aa-intake',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'todo',
     priority: 'medium',
     issueType: 'story',
@@ -415,7 +428,7 @@ export const mockIssues: Issue[] = [
     title: 'Fix: form loses data on back navigation',
     epicId: 'ep-007',
     projectId: 'proj-aa-intake',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'todo',
     priority: 'high',
     issueType: 'bug',
@@ -428,7 +441,7 @@ export const mockIssues: Issue[] = [
     title: 'Research conflict check data sources',
     epicId: 'ep-008',
     projectId: 'proj-aa-intake',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'todo',
     priority: 'high',
     issueType: 'task',
@@ -441,7 +454,7 @@ export const mockIssues: Issue[] = [
     title: 'Conflict check API integration',
     epicId: 'ep-008',
     projectId: 'proj-aa-intake',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'todo',
     priority: 'high',
     issueType: 'story',
@@ -453,7 +466,7 @@ export const mockIssues: Issue[] = [
     title: 'Conflict check UI review screen',
     epicId: 'ep-008',
     projectId: 'proj-aa-intake',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'todo',
     priority: 'medium',
     issueType: 'story',
@@ -466,7 +479,7 @@ export const mockIssues: Issue[] = [
     title: 'Matter creation form design',
     epicId: 'ep-010',
     projectId: 'proj-tko-mgmt',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'todo',
     priority: 'medium',
     issueType: 'task',
@@ -478,7 +491,7 @@ export const mockIssues: Issue[] = [
     title: 'Matter numbering system',
     epicId: 'ep-010',
     projectId: 'proj-tko-mgmt',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'todo',
     priority: 'medium',
     issueType: 'story',
@@ -490,12 +503,38 @@ export const mockIssues: Issue[] = [
     title: 'Matter status workflow',
     epicId: 'ep-010',
     projectId: 'proj-tko-mgmt',
-    workspaceId: 'ws-aa',
+    workspaceId: 'ws-ati',
     status: 'todo',
     priority: 'low',
     issueType: 'story',
     storyPoints: 8,
     labels: [],
+  },
+  // ATI-specific: Request issue type (client intake requests — not present in EOL project)
+  {
+    id: 'ISS-024',
+    title: 'New client intake request — Smith & Associates',
+    epicId: 'ep-007',
+    projectId: 'proj-aa-intake',
+    workspaceId: 'ws-ati',
+    status: 'in-review',
+    priority: 'high',
+    issueType: 'request',
+    storyPoints: undefined,
+    assigneeId: 'r-alex',
+    labels: ['intake', 'new-client'],
+  },
+  {
+    id: 'ISS-025',
+    title: 'Intake request — conflict check exception review',
+    epicId: 'ep-008',
+    projectId: 'proj-aa-intake',
+    workspaceId: 'ws-ati',
+    status: 'todo',
+    priority: 'medium',
+    issueType: 'request',
+    storyPoints: undefined,
+    labels: ['intake', 'conflict-check'],
   },
 ]
 

@@ -11,8 +11,8 @@ export async function GET(request: NextRequest) {
 
     if (workspace === 'eol') {
       issues = mockIssues.filter((i) => i.workspaceId === 'ws-eol')
-    } else if (workspace === 'aa') {
-      issues = mockIssues.filter((i) => i.workspaceId === 'ws-aa')
+    } else if (workspace === 'ati') {
+      issues = mockIssues.filter((i) => i.workspaceId === 'ws-ati')
     }
 
     // TODO Wave 2: replace mock with live Jira client calls

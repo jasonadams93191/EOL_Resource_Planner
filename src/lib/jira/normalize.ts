@@ -1,9 +1,16 @@
 // ============================================================
 // Jira Response Normalizer
 // Converts raw Jira API shapes → domain types
+//
+// Supported projects and their issue type sets:
+//   EOL (ws-eol): Task, Bug, Story, Epic, Sub-task
+//   ATI (ws-ati): Task, Bug, Story, Epic, Sub-task, Request
+//
+// These are the only two projects — normalize to the fixed
+// IssueType union rather than passing raw strings through.
 // TODO Wave 2: implement full field mappings for each workspace
 // ============================================================
-import type { Issue, Epic, Project, IssueStatus, Priority, IssueType } from '@/types/domain'
+import type { Issue, Epic, Project, IssueStatus, Priority, IssueType, WorkspaceId } from '@/types/domain'
 import type { RawJiraIssue, RawJiraProject } from './client'
 
 // TODO Wave 2: map Jira status names → IssueStatus
@@ -30,7 +37,21 @@ function normalizePriority(jiraPriority: string): Priority {
   return map[jiraPriority] ?? 'medium'
 }
 
-export function normalizeIssue(raw: RawJiraIssue, workspaceId: string, projectId: string): Issue {
+// Normalize Jira issue type name → controlled IssueType enum value.
+// 'Request' is ATI-specific — not present in EOL project.
+function normalizeIssueType(jiraTypeName: string | undefined): IssueType {
+  const map: Record<string, IssueType> = {
+    story: 'story',
+    bug: 'bug',
+    task: 'task',
+    'sub-task': 'sub-task',
+    subtask: 'sub-task',
+    request: 'request', // ATI only
+  }
+  return map[(jiraTypeName ?? '').toLowerCase()] ?? 'task'
+}
+
+export function normalizeIssue(raw: RawJiraIssue, workspaceId: WorkspaceId, projectId: string): Issue {
   // TODO Wave 2: replace stub field access with real Jira field paths
   const fields = raw.fields as Record<string, unknown>
   return {
@@ -41,8 +62,7 @@ export function normalizeIssue(raw: RawJiraIssue, workspaceId: string, projectId
     workspaceId,
     status: normalizeStatus((fields.status as { name?: string })?.name ?? ''),
     priority: normalizePriority((fields.priority as { name?: string })?.name ?? ''),
-    issueType:
-      ((fields.issuetype as { name?: string })?.name?.toLowerCase() as IssueType) ?? 'task',
+    issueType: normalizeIssueType((fields.issuetype as { name?: string })?.name),
     storyPoints: (fields.story_points as number) ?? undefined,
     assigneeId: (fields.assignee as { accountId?: string })?.accountId,
     labels: (fields.labels as string[]) ?? [],
@@ -66,7 +86,7 @@ export function normalizeEpic(raw: RawJiraIssue, projectId: string): Epic {
   }
 }
 
-export function normalizeProject(raw: RawJiraProject, workspaceId: string): Project {
+export function normalizeProject(raw: RawJiraProject, workspaceId: WorkspaceId): Project {
   // TODO Wave 2: fetch full project details including status
   return {
     id: raw.id,

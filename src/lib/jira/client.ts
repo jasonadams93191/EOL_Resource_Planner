@@ -55,14 +55,15 @@ export class JiraClient {
   }
 }
 
-// Pre-configured client instances (config loaded server-side only)
+// Pre-configured client instances — one per fixed workspace.
 // TODO Wave 2: initialize with real config from getConfig()
 export const eolJiraClient = new JiraClient(
   { baseUrl: '', email: '', apiToken: '', projectKey: 'EOL' },
   'ws-eol'
 )
 
-export const aaJiraClient = new JiraClient(
-  { baseUrl: '', email: '', apiToken: '', projectKey: 'AA' },
-  'ws-aa'
+// ATI = AA/TKO Projects workspace (project key: ATI)
+export const atiJiraClient = new JiraClient(
+  { baseUrl: '', email: '', apiToken: '', projectKey: 'ATI' },
+  'ws-ati'
 )

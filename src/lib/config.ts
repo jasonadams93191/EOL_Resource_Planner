@@ -10,9 +10,11 @@ export interface JiraWorkspaceConfig {
   projectKey: string
 }
 
+// Two fixed workspaces — EOL Tech Team and AA/TKO Projects (ATI).
+// These keys map directly to WorkspaceId in domain.ts.
 export interface AppConfig {
-  eolJira: JiraWorkspaceConfig
-  aaJira: JiraWorkspaceConfig
+  eolJira: JiraWorkspaceConfig // ws-eol
+  atiJira: JiraWorkspaceConfig // ws-ati
 }
 
 function requireEnv(key: string): string {
@@ -31,11 +33,11 @@ export function getConfig(): AppConfig {
       apiToken: requireEnv('JIRA_EOL_API_TOKEN'),
       projectKey: requireEnv('JIRA_EOL_PROJECT_KEY'),
     },
-    aaJira: {
-      baseUrl: requireEnv('JIRA_AA_BASE_URL'),
-      email: requireEnv('JIRA_AA_EMAIL'),
-      apiToken: requireEnv('JIRA_AA_API_TOKEN'),
-      projectKey: requireEnv('JIRA_AA_PROJECT_KEY'),
+    atiJira: {
+      baseUrl: requireEnv('JIRA_ATI_BASE_URL'),
+      email: requireEnv('JIRA_ATI_EMAIL'),
+      apiToken: requireEnv('JIRA_ATI_API_TOKEN'),
+      projectKey: requireEnv('JIRA_ATI_PROJECT_KEY'),
     },
   }
 }

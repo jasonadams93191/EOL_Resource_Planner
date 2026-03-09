@@ -1,6 +1,6 @@
 'use client'
 
-export type WorkspaceFilter = 'all' | 'eol' | 'aa'
+export type WorkspaceFilter = 'all' | 'eol' | 'ati'
 
 interface WorkspaceSelectorProps {
   value: WorkspaceFilter
@@ -10,7 +10,7 @@ interface WorkspaceSelectorProps {
 const tabs: { label: string; value: WorkspaceFilter }[] = [
   { label: 'All Workspaces', value: 'all' },
   { label: 'EOL Tech Team', value: 'eol' },
-  { label: 'AA/TKO Projects', value: 'aa' },
+  { label: 'AA/TKO Projects', value: 'ati' },
 ]
 
 export function WorkspaceSelector({ value, onChange }: WorkspaceSelectorProps) {

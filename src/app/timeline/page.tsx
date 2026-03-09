@@ -10,7 +10,7 @@ export default function TimelinePage() {
   const filteredProjects = mockProjects.filter((p) => {
     if (workspace === 'all') return true
     if (workspace === 'eol') return p.workspaceId === 'ws-eol'
-    if (workspace === 'aa') return p.workspaceId === 'ws-aa'
+    if (workspace === 'ati') return p.workspaceId === 'ws-ati'
     return true
   })
 

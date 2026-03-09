@@ -11,15 +11,15 @@ const jiraEnvVars = [
     secret: true,
   },
   { key: 'JIRA_EOL_PROJECT_KEY', label: 'EOL Project Key', workspace: 'EOL Tech Team' },
-  { key: 'JIRA_AA_BASE_URL', label: 'AA Jira Base URL', workspace: 'AA/TKO Projects' },
-  { key: 'JIRA_AA_EMAIL', label: 'AA Jira Email', workspace: 'AA/TKO Projects' },
+  { key: 'JIRA_ATI_BASE_URL', label: 'ATI Jira Base URL', workspace: 'AA/TKO Projects' },
+  { key: 'JIRA_ATI_EMAIL', label: 'ATI Jira Email', workspace: 'AA/TKO Projects' },
   {
-    key: 'JIRA_AA_API_TOKEN',
-    label: 'AA Jira API Token',
+    key: 'JIRA_ATI_API_TOKEN',
+    label: 'ATI Jira API Token',
     workspace: 'AA/TKO Projects',
     secret: true,
   },
-  { key: 'JIRA_AA_PROJECT_KEY', label: 'AA Project Key', workspace: 'AA/TKO Projects' },
+  { key: 'JIRA_ATI_PROJECT_KEY', label: 'ATI Project Key (ATI)', workspace: 'AA/TKO Projects' },
 ]
 
 export default function SettingsPage() {
