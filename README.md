@@ -23,7 +23,7 @@ This tool answers three key questions for the AA/EOL team:
 | Workspace | Projects | Jira Key |
 |---|---|---|
 | EOL Tech Team | Infrastructure EOL Remediation, Security Compliance | EOL |
-| AA/TKO Projects | Attorney Intake Automation, TKO Matter Management | AA |
+| AA/TKO Projects | Attorney Intake Automation, TKO Matter Management | ATI |
 
 ### Shared Resource Pool (4 people)
 
@@ -52,13 +52,43 @@ UI Pages (Next.js App Router)
               ├── Scheduling Engine   (src/lib/scheduling/engine.ts)
               └── Scenario Engine     (src/lib/scenarios/engine.ts)
                     │
-                    ├── Mock Data Layer  (src/lib/mock/sample-data.ts)   <- Wave 1
+                    ├── Planning Layer   (src/lib/planning/)            <- added Wave 1
+                    │     normalize-planning.ts
+                    │     PlanningProject · PlanningEpic · PlanningWorkItem
+                    │     (our supervision model, not a Jira mirror)
                     │
-                    └── Jira Layer       (src/lib/jira/)                 <- Wave 2
+                    ├── Mock Data Layer  (src/lib/mock/sample-data.ts)  <- Wave 1
+                    │   Planning Data   (src/lib/mock/planning-data.ts) <- Wave 1
+                    │
+                    └── Jira Layer       (src/lib/jira/)                <- Wave 2
                           client.ts · normalize.ts
                                 │
-                                └── Jira REST API (two workspaces)      <- Wave 2
+                                └── Jira REST API (two workspaces)     <- Wave 2
 ```
+
+### Two-Layer Data Model
+
+The app maintains a deliberate separation between **input** and **output** data models:
+
+| Layer | Types | Location | Description |
+|---|---|---|---|
+| **Jira input** | `Issue`, `Epic`, `Project` | `src/types/domain.ts` | Raw structure from Jira — models work the way Jira stores it |
+| **Planning output** | `PlanningProject`, `PlanningEpic`, `PlanningWorkItem` | `src/types/planning.ts` | Models work the way we want to supervise it |
+
+**Why they differ:**
+
+- A `PlanningProject` can aggregate issues from **both** Jira workspaces (EOL + ATI)
+- A `PlanningEpic` may map to one Jira Epic, or to several Jira Tasks/Sub-tasks that represent epic-level work in planning terms even if Jira doesn't label them that way
+- Manual work items (`sourceType: 'manual'`) are first-class in the planning layer — no Jira backing required
+- We **never write back to Jira** — the planning layer is read/plan only
+
+**Example projects showing the planning structure:**
+
+| Planning Project | Planning Epics | Jira Source(s) |
+|---|---|---|
+| Call Sofia | Phase 1, Phase 2, Phase 3 | ATI workspace |
+| AA/TKO Sales Cloud Revamp | Sales Cloud Enablement, Next Step Notes, Team Retirement, Docs | ATI workspace + manual |
+| RingCentral Setup | RingCentral Setup, RingSense Setup, EOL CTI Integration | ATI + EOL (cross-workspace) |
 
 ---
 
@@ -66,14 +96,17 @@ UI Pages (Next.js App Router)
 
 | Path | Description |
 |---|---|
-| `src/types/domain.ts` | Shared TypeScript interfaces and enums for all domain objects |
+| `src/types/domain.ts` | Jira-input domain types: Issue, Epic, Project, Resource, WorkspaceId, etc. |
+| `src/types/planning.ts` | Planning-output types: PlanningProject, PlanningEpic, PlanningWorkItem, PlanningSourceRef |
 | `src/lib/config.ts` | Server-side environment variable loader (never exposed to browser) |
 | `src/lib/jira/client.ts` | Jira API client stub — Wave 2 target |
 | `src/lib/jira/normalize.ts` | Jira API response to domain type normalizer |
 | `src/lib/estimation/engine.ts` | Issue estimation engine (story points to hours) |
 | `src/lib/scheduling/engine.ts` | Project scheduling engine (capacity to dates) |
 | `src/lib/scenarios/engine.ts` | Scenario modeling engine (staffing changes to delta) |
+| `src/lib/planning/normalize-planning.ts` | Maps Jira domain types → planning-layer types; status/priority converters |
 | `src/lib/mock/sample-data.ts` | Realistic mock data for all domain objects |
+| `src/lib/mock/planning-data.ts` | Mock planning projects (Call Sofia, Sales Cloud, RingCentral) |
 | `src/components/AppShell.tsx` | Sidebar nav shell wrapping all pages |
 | `src/components/WorkspaceSelector.tsx` | Tab control to filter by Jira workspace |
 | `src/components/StatusCard.tsx` | KPI summary card with status badge |
@@ -136,10 +169,10 @@ All variables are server-side only (set in `.env.local`, never sent to the brows
 | `JIRA_EOL_EMAIL` | Jira account email for EOL workspace |
 | `JIRA_EOL_API_TOKEN` | Jira API token for EOL workspace |
 | `JIRA_EOL_PROJECT_KEY` | Jira project key (e.g., `EOL`) |
-| `JIRA_AA_BASE_URL` | AA/TKO Jira base URL |
-| `JIRA_AA_EMAIL` | Jira account email for AA workspace |
-| `JIRA_AA_API_TOKEN` | Jira API token for AA workspace |
-| `JIRA_AA_PROJECT_KEY` | Jira project key (e.g., `AA`) |
+| `JIRA_ATI_BASE_URL` | AA/TKO Jira base URL |
+| `JIRA_ATI_EMAIL` | Jira account email for ATI workspace |
+| `JIRA_ATI_API_TOKEN` | Jira API token for ATI workspace |
+| `JIRA_ATI_PROJECT_KEY` | Jira project key (`ATI`) |
 
 ---
 
