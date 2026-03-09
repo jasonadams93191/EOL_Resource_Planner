@@ -15,7 +15,7 @@ function buildItemLookup(projects: PlanningProject[]): Record<string, { title: s
   for (const project of projects) {
     for (const epic of project.epics) {
       for (const item of epic.workItems) {
-        map[item.id] = { title: item.title, projectName: project.name, priority: item.priority }
+        map[item.id] = { title: item.title, projectName: project.name, priority: item.priority ?? project.priority }
       }
     }
   }

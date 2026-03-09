@@ -20,6 +20,41 @@
 
 import type { WorkspaceId, ProjectKey, ResourceType } from './domain'
 
+// ── Project Stage ──────────────────────────────────────────────
+// Lifecycle stage for initiative-level planning.
+export type ProjectStage =
+  | 'backlog'
+  | 'discovery'
+  | 'defined'
+  | 'ready-for-planning'
+  | 'planned'
+  | 'in-delivery'
+  | 'complete'
+  | 'archived'
+
+export const PROJECT_STAGE_LABELS: Record<ProjectStage, string> = {
+  'backlog': 'Backlog',
+  'discovery': 'Discovery',
+  'defined': 'Defined',
+  'ready-for-planning': 'Ready for Planning',
+  'planned': 'Planned',
+  'in-delivery': 'In Delivery',
+  'complete': 'Complete',
+  'archived': 'Archived',
+}
+
+// ── Effort Band ────────────────────────────────────────────────
+// Rough initiative-level sizing in sprint terms.
+export type EffortBand = 'XS' | 'S' | 'M' | 'L' | 'XL'
+
+export const EFFORT_BAND_LABELS: Record<EffortBand, string> = {
+  XS: '< 1 sprint',
+  S: '1–2 sprints',
+  M: '3–5 sprints',
+  L: '6–10 sprints',
+  XL: '10+ sprints',
+}
+
 // ── Effort Size ────────────────────────────────────────────────
 // T-shirt sizing mapped to sprint fractions.
 export type EffortSize = 'XS' | 'S' | 'M' | 'L' | 'XL'
@@ -161,7 +196,7 @@ export interface PlanningWorkItem {
   title: string
   planningEpicId: string
   status: PlanningStatus
-  priority: PlanningPriority
+  priority?: PlanningPriority         // optional — inherits from project if absent
   estimatedHours?: number
   assigneeId?: string
   // All Jira issues (or manual entries) that this item is derived from
@@ -197,7 +232,7 @@ export interface PlanningEpic {
   title: string
   planningProjectId: string
   status: PlanningStatus
-  priority: PlanningPriority
+  priority?: PlanningPriority         // optional — inherits from project if absent
   workItems: PlanningWorkItem[]
   // Source refs at the epic level (the Jira epics or issues this aggregates)
   sourceRefs: PlanningSourceRef[]
@@ -205,6 +240,7 @@ export interface PlanningEpic {
   // Phase 1 fields
   portfolio: Portfolio // which portfolio this epic belongs to
   estimatedSprints?: number // how many sprints this epic spans
+  sequenceOrder?: number              // suggested order within project
 }
 
 // ── Planning Project ──────────────────────────────────────────
@@ -222,4 +258,20 @@ export interface PlanningProject {
   notes?: string
   // Phase 1 fields
   portfolio: Portfolio // derived from source workspaces
+  // Initiative-level fields
+  priority: PlanningPriority          // required — lives HERE only
+  stage: ProjectStage                 // lifecycle stage
+  confidence?: 'low' | 'medium' | 'high'  // estimation confidence at project level
+  effortBand?: EffortBand             // rough size of the whole initiative
+  owner?: string                      // team member id
+}
+
+// ── Effective Priority Helper ──────────────────────────────────
+// Derives effective priority by walking up to project level.
+// Used by engines that need a concrete priority value.
+export function getEffectivePriority(
+  item: { priority?: PlanningPriority },
+  project: { priority: PlanningPriority }
+): PlanningPriority {
+  return item.priority ?? project.priority
 }

@@ -164,7 +164,8 @@ export function normalizePlanningProject(
   epics: PlanningEpic[],
   sourceRefs: PlanningSourceRef[],
   portfolio: Portfolio,
-  overrides?: Partial<Omit<PlanningProject, 'epics' | 'sourceRefs' | 'portfolio'>>
+  priority: PlanningPriority,
+  overrides?: Partial<Omit<PlanningProject, 'epics' | 'sourceRefs' | 'portfolio' | 'priority' | 'stage'>>
 ): PlanningProject {
   const statuses = epics.map((e) => e.status)
   const derivedStatus: PlanningStatus = statuses.includes('blocked')
@@ -180,6 +181,8 @@ export function normalizePlanningProject(
     name,
     status: derivedStatus,
     portfolio,
+    priority,
+    stage: 'backlog',  // default stage; callers override via overrides
     epics,
     sourceRefs,
     ...overrides,

@@ -147,6 +147,8 @@ describe('buildSprintPlan', () => {
       name: 'Test',
       status: 'not-started',
       portfolio: 'ATI',
+      priority: 'high',
+      stage: 'planned',
       sourceRefs: [],
       epics: [
         {

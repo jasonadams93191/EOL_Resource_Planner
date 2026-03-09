@@ -9,7 +9,8 @@
 // TODO Wave 2: replace with real constraint-based scheduling
 // ============================================================
 
-import type { PlanningProject, Sprint, TeamMember, CapacityAllocation } from '@/types/planning'
+import type { PlanningProject, Sprint, TeamMember, CapacityAllocation, PlanningPriority } from '@/types/planning'
+import { getEffectivePriority } from '@/types/planning'
 import type { CapacityProfile } from '@/types/domain'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ interface WorkItemSlot {
   projectId: string
   workItemId: string
   effortHours: number
-  priority: 'high' | 'medium' | 'low'
+  priority: PlanningPriority
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -43,7 +44,7 @@ function addDays(isoDate: string, days: number): string {
 }
 
 /** Priority sort weight — lower = higher priority. */
-function priorityWeight(p: 'high' | 'medium' | 'low'): number {
+export function priorityWeight(p: PlanningPriority): number {
   return p === 'high' ? 0 : p === 'medium' ? 1 : 2
 }
 
@@ -102,16 +103,25 @@ export function buildSprintPlan(
 ): SprintPlan {
   const sprintCapacityHours = calculateSprintCapacity(capacity)
 
+  // Sort projects by priority (high → medium → low) before flattening
+  const sortedProjects = [...projects].sort(
+    (a, b) => priorityWeight(a.priority) - priorityWeight(b.priority)
+  )
+
   // Flatten work items
   const slots: WorkItemSlot[] = []
-  for (const project of projects) {
-    for (const epic of project.epics) {
+  for (const project of sortedProjects) {
+    // Sort epics by sequenceOrder if present
+    const sortedEpics = [...project.epics].sort(
+      (a, b) => (a.sequenceOrder ?? 999) - (b.sequenceOrder ?? 999)
+    )
+    for (const epic of sortedEpics) {
       for (const item of epic.workItems) {
         slots.push({
           projectId: project.id,
           workItemId: item.id,
           effortHours: item.effortHours,
-          priority: item.priority,
+          priority: getEffectivePriority(item, project),
         })
       }
     }
@@ -225,18 +235,27 @@ export function buildSprintRoadmap(
   // Total team sprint capacity (sum of all member sprintCapacity fractions)
   const totalTeamCapacity = activeMembers.reduce((sum, m) => sum + m.sprintCapacity, 0)
 
+  // Sort projects by priority (high → medium → low) before flattening
+  const sortedProjects = [...projects].sort(
+    (a, b) => priorityWeight(a.priority) - priorityWeight(b.priority)
+  )
+
   // Flatten work items (exclude done)
   interface Slot {
     projectId: string
     workItemId: string
     effortInSprints: number
-    priority: 'high' | 'medium' | 'low'
+    priority: PlanningPriority
     primarySkill?: string
   }
 
   const slots: Slot[] = []
-  for (const project of projects) {
-    for (const epic of project.epics) {
+  for (const project of sortedProjects) {
+    // Sort epics by sequenceOrder if present
+    const sortedEpics = [...project.epics].sort(
+      (a, b) => (a.sequenceOrder ?? 999) - (b.sequenceOrder ?? 999)
+    )
+    for (const epic of sortedEpics) {
       for (const item of epic.workItems) {
         if (item.status === 'done') continue
         const effortInSprints = item.effortInSprints ?? Math.max(0.25, item.effortHours / 40)
@@ -244,7 +263,7 @@ export function buildSprintRoadmap(
           projectId: project.id,
           workItemId: item.id,
           effortInSprints,
-          priority: item.priority,
+          priority: getEffectivePriority(item, project),
           primarySkill: item.primarySkill,
         })
       }
