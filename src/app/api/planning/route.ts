@@ -21,18 +21,38 @@ import { mockCapacityProfile } from '@/lib/mock/sample-data'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
 import { buildSprintPlan, buildSprintRoadmap } from '@/lib/planning/sprint-engine'
 import { analyzeBottlenecks } from '@/lib/planning/bottleneck-engine'
-import type { Portfolio, TeamMember } from '@/types/planning'
+import { getAllSnapshots } from '@/lib/jira/snapshot-store'
+import { importPlanningFromJiraSnapshot } from '@/lib/jira/import-snapshot'
+import type { Portfolio, TeamMember, PlanningProject } from '@/types/planning'
 
 const START_DATE = '2026-03-09'
 
 export function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const portfolioParam = searchParams.get('portfolio') as Portfolio | null
+  const source = searchParams.get('source')
+
+  // Jira snapshot source — import from in-memory store
+  let baseProjects: PlanningProject[] = mockAllPlanningProjects
+  let dataSource = 'mock-phase1'
+
+  if (source === 'jiraSnapshot') {
+    const snapshots = getAllSnapshots()
+    if (snapshots['ws-eol'] || snapshots['ws-ati']) {
+      const { projects: imported } = importPlanningFromJiraSnapshot(
+        snapshots['ws-eol'],
+        snapshots['ws-ati']
+      )
+      baseProjects = imported
+      dataSource = 'jira-snapshot'
+    }
+    // If no snapshot available, fall through to seed data
+  }
 
   // Filter by portfolio if requested
   const projects = portfolioParam
-    ? mockAllPlanningProjects.filter((p) => p.portfolio === portfolioParam)
-    : mockAllPlanningProjects
+    ? baseProjects.filter((p) => p.portfolio === portfolioParam)
+    : baseProjects
 
   // Build sprint plan (hours-based, for backward compat)
   const sprintPlan = buildSprintPlan(projects, mockCapacityProfile, START_DATE)
@@ -52,7 +72,7 @@ export function GET(request: NextRequest) {
     roadmap,
     bottlenecks,
     capacity: mockCapacityProfile,
-    source: 'mock-phase1',
+    source: dataSource,
   })
 }
 

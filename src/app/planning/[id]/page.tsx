@@ -114,8 +114,8 @@ function WorkItemRow({
       <td className="px-3 py-2">
         <div className="flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[item.status] ?? 'bg-gray-300'}`} />
-          {item.jiraFields?.key ? (
-            <span className="text-xs rounded bg-blue-100 text-blue-700 px-1 py-0.5 font-mono shrink-0">{item.jiraFields.key}</span>
+          {item.jira?.issueKey ? (
+            <span className="text-xs rounded bg-blue-100 text-blue-700 px-1 py-0.5 font-mono shrink-0">{item.jira!.issueKey}</span>
           ) : item.sourceRefs.every((r) => r.sourceType === 'manual') ? (
             <span className="text-xs rounded bg-gray-100 text-gray-400 px-1 py-0.5 font-mono shrink-0" title="Manual item — no Jira key">[manual]</span>
           ) : null}
@@ -412,8 +412,8 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-gray-900">{project.name}</h1>
-            {project.jiraFields?.key ? (
-              <span className="text-xs rounded bg-blue-100 text-blue-700 px-2 py-0.5 font-mono">{project.jiraFields.key}</span>
+            {project.jira?.issueKey ? (
+              <span className="text-xs rounded bg-blue-100 text-blue-700 px-2 py-0.5 font-mono">{project.jira!.issueKey}</span>
             ) : project.sourceRefs.every((r) => r.sourceType === 'manual') ? (
               <span className="text-xs rounded bg-gray-100 text-gray-400 px-2 py-0.5 font-mono" title="No Jira project linked">[manual]</span>
             ) : null}

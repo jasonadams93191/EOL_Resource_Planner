@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
 import { buildSprintRoadmap } from '@/lib/planning/sprint-engine'
@@ -14,8 +14,10 @@ import { BottleneckPanel } from '@/components/planning/BottleneckPanel'
 import { ResourceTimelineView } from '@/components/planning/ResourceTimelineView'
 import { InitiativeTimelineView } from '@/components/planning/InitiativeTimelineView'
 import { CapacityChart } from '@/components/planning/CapacityChart'
+import { DataSourceBanner } from '@/components/planning/DataSourceBanner'
 import type { TeamMember, PlanningProject } from '@/types/planning'
 import type { BottleneckSummary } from '@/lib/planning/bottleneck-engine'
+import type { DataSourceMode } from '@/lib/planning/data-source-mode'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -32,12 +34,23 @@ const TABS: Array<{ id: Tab; label: string }> = [
 
 const START_DATE = '2026-03-09'
 
+// ── Jira snapshot data loader ─────────────────────────────────
+
+async function loadJiraProjects(): Promise<PlanningProject[]> {
+  const res = await fetch('/api/planning?source=jiraSnapshot')
+  if (!res.ok) return []
+  const data = await res.json()
+  return Array.isArray(data.projects) ? data.projects : []
+}
+
 // ── Page ──────────────────────────────────────────────────────
 
 export default function PlanningPage() {
   const [activeTab, setActiveTab] = useState<Tab>('portfolio')
+  const [dataSourceMode, setDataSourceMode] = useState<DataSourceMode>('seed')
+  const [jiraProjects, setJiraProjects] = useState<PlanningProject[] | null>(null)
+  const [jiraLoadError, setJiraLoadError] = useState<string | null>(null)
   const [scenarioMembers, setScenarioMembers] = useState<TeamMember[]>(TEAM_MEMBERS)
-  const [scenarioProjects, setScenarioProjects] = useState<PlanningProject[]>(mockAllPlanningProjects)
   const [scenarioStartDate, setScenarioStartDate] = useState(START_DATE)
   const [roadmap, setRoadmap] = useState(() =>
     buildSprintRoadmap(mockAllPlanningProjects, TEAM_MEMBERS, START_DATE)
@@ -47,6 +60,41 @@ export default function PlanningPage() {
       buildSprintRoadmap(mockAllPlanningProjects, TEAM_MEMBERS, START_DATE)
     )
   )
+
+  // Recompute engines whenever projects/members change
+  function recompute(projects: PlanningProject[], members: TeamMember[], startDate: string) {
+    const newRoadmap = buildSprintRoadmap(projects, members, startDate)
+    setRoadmap(newRoadmap)
+    setBottleneckSummary(analyzeBottlenecks(projects, members, SKILLS, ROLES, newRoadmap))
+  }
+
+  // Called by DataSourceBanner when mode changes
+  const handleModeChange = useCallback(async (mode: DataSourceMode) => {
+    setDataSourceMode(mode)
+    setJiraLoadError(null)
+
+    if (mode === 'jiraSnapshot') {
+      // Try to load from /api/planning?source=jiraSnapshot
+      const projects = await loadJiraProjects()
+      if (projects.length === 0) {
+        setJiraProjects(null)
+        // Don't error — snapshot may simply be empty (user hasn't synced yet)
+      } else {
+        setJiraProjects(projects)
+        recompute(projects, scenarioMembers, scenarioStartDate)
+      }
+    } else {
+      // Revert to seed data
+      setJiraProjects(null)
+      recompute(mockAllPlanningProjects, scenarioMembers, scenarioStartDate)
+    }
+  }, [scenarioMembers, scenarioStartDate]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Active project list depending on mode
+  const activeProjects =
+    dataSourceMode === 'jiraSnapshot' && jiraProjects != null
+      ? jiraProjects
+      : mockAllPlanningProjects
 
   function handleRecompute({
     members,
@@ -58,11 +106,8 @@ export default function PlanningPage() {
     startDate: string
   }) {
     setScenarioMembers(members)
-    setScenarioProjects(projects)
     setScenarioStartDate(startDate)
-    const newRoadmap = buildSprintRoadmap(projects, members, startDate)
-    setRoadmap(newRoadmap)
-    setBottleneckSummary(analyzeBottlenecks(projects, members, SKILLS, ROLES, newRoadmap))
+    recompute(projects, members, startDate)
     setActiveTab('roadmap')
   }
 
@@ -75,6 +120,22 @@ export default function PlanningPage() {
           Phase 1 MVP — portfolio view, team model, assignment scoring, sprint roadmap, bottleneck analysis
         </p>
       </div>
+
+      {/* Data source mode banner */}
+      <DataSourceBanner onModeChange={handleModeChange} />
+
+      {/* Jira mode notice */}
+      {dataSourceMode === 'jiraSnapshot' && jiraProjects === null && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+          No Jira snapshot loaded. Click <strong>Sync Jira</strong> in the banner above, then switch
+          back to Jira Snapshot mode to see live data.
+        </div>
+      )}
+      {jiraLoadError && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+          {jiraLoadError}
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
@@ -96,7 +157,7 @@ export default function PlanningPage() {
       {/* Tab content */}
       {activeTab === 'portfolio' && (
         <PortfolioView
-          projects={scenarioProjects}
+          projects={activeProjects}
           members={scenarioMembers}
           roadmap={roadmap}
         />
@@ -104,7 +165,7 @@ export default function PlanningPage() {
 
       {activeTab === 'projects' && (
         <ProjectEpicView
-          projects={mockAllPlanningProjects}
+          projects={activeProjects}
           members={scenarioMembers}
           skills={SKILLS}
           roadmap={roadmap}
@@ -123,11 +184,11 @@ export default function PlanningPage() {
         <div className="space-y-8">
           <section>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Resource View</h3>
-            <ResourceTimelineView roadmap={roadmap} projects={scenarioProjects} members={scenarioMembers} />
+            <ResourceTimelineView roadmap={roadmap} projects={activeProjects} members={scenarioMembers} />
           </section>
           <section>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Initiative Timeline</h3>
-            <InitiativeTimelineView roadmap={roadmap} projects={scenarioProjects} members={scenarioMembers} />
+            <InitiativeTimelineView roadmap={roadmap} projects={activeProjects} members={scenarioMembers} />
           </section>
           <section>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Capacity vs Load</h3>
@@ -141,7 +202,7 @@ export default function PlanningPage() {
             <div className="p-2">
               <SprintRoadmapView
                 roadmap={roadmap}
-                projects={scenarioProjects}
+                projects={activeProjects}
                 members={scenarioMembers}
               />
             </div>
@@ -161,7 +222,7 @@ export default function PlanningPage() {
       {activeTab === 'scenarios' && (
         <ScenarioControls
           initialMembers={scenarioMembers}
-          initialProjects={scenarioProjects}
+          initialProjects={activeProjects}
           startDate={scenarioStartDate}
           onRecompute={handleRecompute}
         />

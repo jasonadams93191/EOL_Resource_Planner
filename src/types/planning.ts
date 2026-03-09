@@ -238,16 +238,28 @@ export interface Sprint {
   capacityHours: number // total team capacity for this sprint
 }
 
-// ── Jira Fields Envelope ───────────────────────────────────────
-// Carries Jira-native metadata for items that originated in Jira.
+// ── Jira Issue Data Envelope ───────────────────────────────────
+// Full Jira-native metadata for items that originated in Jira.
 // For manual (non-Jira) items these fields act as editable placeholders.
-export interface JiraFields {
-  key?: string          // e.g. "ATI-142"
-  issueType?: string    // "Epic", "Story", "Task", etc.
-  jiraStatus?: string   // raw Jira status string (e.g. "In Progress")
-  reporter?: string     // display name of the Jira reporter
+// Scope: EOL and ATI projects only. READ-ONLY — no Jira writes permitted.
+export interface JiraIssueData {
+  projectKey?: 'EOL' | 'ATI'
+  issueKey?: string         // e.g. "ATI-142"
+  issueId?: string
+  issueType?: string        // "Epic", "Story", "Task", "Request" (ATI only)
+  status?: string
+  statusCategory?: string   // "To Do", "In Progress", "Done"
+  priority?: string
+  summary?: string
+  description?: string
+  assignee?: { accountId?: string; displayName?: string }
+  reporter?: { accountId?: string; displayName?: string }
   labels?: string[]
-  storyPoints?: number
+  components?: string[]
+  parentKey?: string        // parent epic key or parent issue key
+  createdAt?: string
+  updatedAt?: string
+  url?: string
 }
 
 // ── Source Reference ─────────────────────────────────────────
@@ -316,7 +328,7 @@ export interface PlanningWorkItem {
   dependsOnWorkItemIds?: string[]
   splitRecommended?: boolean
   manualOverrides?: ManualOverride[]
-  jiraFields?: JiraFields
+  jira?: JiraIssueData
 }
 
 // ── Planning Epic ─────────────────────────────────────────────
@@ -339,7 +351,7 @@ export interface PlanningEpic {
   portfolio: Portfolio // which portfolio this epic belongs to
   estimatedSprints?: number // how many sprints this epic spans
   sequenceOrder?: number              // suggested order within project
-  jiraFields?: JiraFields
+  jira?: JiraIssueData
 }
 
 // ── Planning Project ──────────────────────────────────────────
@@ -365,7 +377,7 @@ export interface PlanningProject {
   effortBand?: EffortBand             // rough size of the whole initiative
   owner?: string                      // team member id
   planningType?: PlanningType         // initiative classification
-  jiraFields?: JiraFields
+  jira?: JiraIssueData
 }
 
 // ── Effective Priority Helper ──────────────────────────────────

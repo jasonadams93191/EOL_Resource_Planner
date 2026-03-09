@@ -53,7 +53,7 @@ function normalizeIssueType(jiraTypeName: string | undefined): IssueType {
 
 export function normalizeIssue(raw: RawJiraIssue, workspaceId: WorkspaceId, projectId: string): Issue {
   // TODO Wave 2: replace stub field access with real Jira field paths
-  const fields = raw.fields as Record<string, unknown>
+  const fields = raw.fields as unknown as Record<string, unknown>
   return {
     id: raw.id,
     title: (fields.summary as string) ?? 'Untitled',
@@ -71,7 +71,7 @@ export function normalizeIssue(raw: RawJiraIssue, workspaceId: WorkspaceId, proj
 
 export function normalizeEpic(raw: RawJiraIssue, projectId: string): Epic {
   // TODO Wave 2: map epic-specific Jira fields
-  const fields = raw.fields as Record<string, unknown>
+  const fields = raw.fields as unknown as Record<string, unknown>
   const fullPriority = normalizePriority((fields.priority as { name?: string })?.name ?? '')
   // Epic.priority only supports 'high' | 'medium' | 'low' — clamp highest/lowest
   const epicPriority: Epic['priority'] =
