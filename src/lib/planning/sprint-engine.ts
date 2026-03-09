@@ -261,12 +261,15 @@ export function buildSprintRoadmap(
 
   slots.sort((a, b) => priorityWeight(a.priority) - priorityWeight(b.priority))
 
-  // Per-sprint, per-member remaining hours tracker (starts at targetPlannedHours soft cap)
+  // Per-sprint, per-member remaining hours tracker.
+  // Cap at 55% of targetPlannedHours per sprint to spread work across more sprints
+  // and avoid overloading any sprint visually.
+  const PLACEMENT_CAP_FRACTION = 0.55
   const memberHours: Record<number, Record<string, number>> = {}
   const getSprintHours = (sprintNum: number): Record<string, number> => {
     if (!memberHours[sprintNum]) {
       memberHours[sprintNum] = Object.fromEntries(
-        activeMembers.map((m) => [m.id, targetPlannedHours(m)])
+        activeMembers.map((m) => [m.id, Math.max(1, Math.round(targetPlannedHours(m) * PLACEMENT_CAP_FRACTION))])
       )
     }
     return memberHours[sprintNum]
@@ -295,7 +298,8 @@ export function buildSprintRoadmap(
 
         // Can this member fit the item? Allow up to availableHoursPerSprint as absolute max.
         const absoluteMax = member.availableHoursPerSprint
-        const alreadyAllocated = targetPlannedHours(member) - remaining
+        const placementBudget = Math.max(1, Math.round(targetPlannedHours(member) * PLACEMENT_CAP_FRACTION))
+        const alreadyAllocated = placementBudget - remaining  // hours placed so far this sprint
         if (alreadyAllocated + slot.estimatedHours > absoluteMax) continue
         if (slot.estimatedHours > absoluteMax) continue
 

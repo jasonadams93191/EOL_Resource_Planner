@@ -26,6 +26,7 @@ interface TimelineRow {
   isOverflow?: boolean
   isProjected?: boolean
   blockerCount?: number  // number of blockers on this initiative (shown as badge)
+  portfolio?: string     // EOL | ATI | cross-workspace
 }
 
 interface TimeColumn {
@@ -242,6 +243,12 @@ function RowLabel({ row }: { row: TimelineRow }) {
         {row.type === 'initiative' && <span className="text-[10px] bg-[#1a2e6b] text-white rounded px-1 shrink-0">INI</span>}
         {row.type === 'epic'       && <span className="text-[10px] bg-blue-500 text-white rounded px-1 shrink-0">EPK</span>}
         {row.type === 'task'       && <span className="text-[10px] bg-indigo-100 text-indigo-700 rounded px-1 shrink-0">TSK</span>}
+        {row.portfolio && row.type === 'initiative' && (() => {
+          const p = row.portfolio
+          const label = p === 'cross-workspace' ? 'BOTH' : p.toUpperCase()
+          const cls = p === 'EOL' ? 'bg-blue-100 text-blue-700' : p === 'ATI' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+          return <span className={`text-[9px] font-semibold rounded px-1 shrink-0 ${cls}`}>{label}</span>
+        })()}
         <Link href={row.href} className="truncate hover:underline text-gray-800 hover:text-[#1a2e6b] min-w-0">
           {row.title}
         </Link>
@@ -515,6 +522,7 @@ export function TimelineView({ projects, members, roadmap, personBottlenecks, ta
         isOverflow: false,
         isProjected: placedForProject.length === 0,
         blockerCount,
+        portfolio: project.portfolio,
       }
 
       const matchesIni = !query || project.name.toLowerCase().includes(query)

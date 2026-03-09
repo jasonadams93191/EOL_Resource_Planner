@@ -4,12 +4,9 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { TEAM_MEMBERS, SKILLS, ROLES } from '@/lib/mock/team-data'
-import { mockAllPlanningProjects } from '@/lib/mock/planning-data'
-import { buildSprintRoadmap } from '@/lib/planning/sprint-engine'
 import { SKILL_LEVEL_LABELS, targetPlannedHours } from '@/types/planning'
-import type { TeamMember } from '@/types/planning'
-
-const START_DATE = '2026-03-09'
+import type { TeamMember, PlanningProject } from '@/types/planning'
+import type { WorkItemPlacement } from '@/lib/planning/sprint-engine'
 
 function SkillChip({ skillId, level }: { skillId: string; level: number }) {
   const skill = SKILLS.find((s) => s.id === skillId)
@@ -29,10 +26,20 @@ function SkillChip({ skillId, level }: { skillId: string; level: number }) {
 export default function TeamMemberPage() {
   const params = useParams()
   const [member, setMember] = useState<TeamMember | null | 'loading'>('loading')
+  const [projects, setProjects] = useState<PlanningProject[]>([])
+  const [placements, setPlacements] = useState<WorkItemPlacement[]>([])
 
   useEffect(() => {
     const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : ''
     setMember(TEAM_MEMBERS.find((m) => m.id === id) ?? null)
+
+    fetch('/api/planning')
+      .then((r) => r.json())
+      .then((data) => {
+        setProjects(data.projects ?? [])
+        setPlacements(data.roadmap?.workItemPlacements ?? [])
+      })
+      .catch(() => {})
   }, [params.id])
 
   if (member === 'loading') return null
@@ -51,39 +58,41 @@ export default function TeamMemberPage() {
   const role = ROLES.find((r) => r.id === member.primaryRoleId)
   const targetHours = Math.round(member.availableHoursPerSprint * member.utilizationTargetPercent / 100)
 
-  // Build roadmap for assignment data
-  const roadmap = buildSprintRoadmap(mockAllPlanningProjects, TEAM_MEMBERS, START_DATE)
-
-  // Work items assigned to this member
-  type AssignedItem = { title: string; id: string; epicTitle: string; epicId: string; projectName: string; projectId: string; hours: number; sprint: number | undefined }
-  const assignedItems: AssignedItem[] = []
-  for (const project of mockAllPlanningProjects) {
+  // Build work item lookup from all projects
+  const workItemMap = new Map<string, { title: string; epicTitle: string; epicId: string; projectName: string; projectId: string; hours: number; workspace?: string }>()
+  for (const project of projects) {
     for (const epic of project.epics) {
       for (const wi of epic.workItems) {
-        if (wi.assigneeId === member.id) {
-          assignedItems.push({
-            id: wi.id,
-            title: wi.title,
-            epicTitle: epic.title,
-            epicId: epic.id,
-            projectName: project.name,
-            projectId: project.id,
-            hours: wi.estimatedHours,
-            sprint: wi.sprintNumber,
-          })
-        }
+        const workspace = wi.sourceRefs?.[0]?.workspaceId ?? wi.jira?.projectKey ?? ''
+        workItemMap.set(wi.id, {
+          title: wi.title,
+          epicTitle: epic.title,
+          epicId: epic.id,
+          projectName: project.name,
+          projectId: project.id,
+          hours: wi.estimatedHours,
+          workspace,
+        })
       }
     }
   }
 
-  // Sprint load from roadmap placements
-  const placements = (roadmap.workItemPlacements ?? []).filter(
-    (p: { assignedTeamMemberId?: string }) => p.assignedTeamMemberId === member.id
-  )
+  // Assigned items from roadmap placements (sprint engine assigns by team member id)
+  const memberPlacements = placements.filter((p) => p.assignedTeamMemberId === member.id)
+  type AssignedItem = { id: string; title: string; epicTitle: string; epicId: string; projectName: string; projectId: string; hours: number; sprint: number; workspace?: string }
+  const assignedItems: AssignedItem[] = memberPlacements
+    .map((p) => {
+      const wi = workItemMap.get(p.workItemId)
+      if (!wi) return null
+      return { id: p.workItemId, ...wi, sprint: p.sprintNumber }
+    })
+    .filter((x): x is AssignedItem => x !== null)
+    .sort((a, b) => a.sprint - b.sprint)
+
+  // Sprint load from placements
   const sprintHoursMap: Record<number, number> = {}
-  for (const pl of placements) {
-    const sn = (pl as { sprintNumber: number }).sprintNumber
-    sprintHoursMap[sn] = (sprintHoursMap[sn] ?? 0) + ((pl as { estimatedHours: number }).estimatedHours ?? 0)
+  for (const pl of memberPlacements) {
+    sprintHoursMap[pl.sprintNumber] = (sprintHoursMap[pl.sprintNumber] ?? 0) + pl.estimatedHours
   }
   const sprintEntries = Object.entries(sprintHoursMap)
     .map(([k, v]) => ({ sprint: Number(k), hours: v }))
@@ -135,7 +144,6 @@ export default function TeamMemberPage() {
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Sprint Load</h3>
           <div className="space-y-2">
             {sprintEntries.map(({ sprint, hours }) => {
-              // pct = actual / target × 100; bar caps at available capacity
               const sprintTarget = targetPlannedHours(member)
               const pct = sprintTarget > 0 ? Math.round((hours / sprintTarget) * 100) : 0
               const barPct = Math.min(100, Math.round((hours / member.availableHoursPerSprint) * 100))
@@ -162,40 +170,45 @@ export default function TeamMemberPage() {
           <h3 className="text-sm font-semibold text-gray-700">Assigned Tasks ({assignedItems.length})</h3>
         </div>
         {assignedItems.length === 0 ? (
-          <p className="px-5 py-4 text-sm text-gray-400">No tasks directly assigned.</p>
+          <p className="px-5 py-4 text-sm text-gray-400">No tasks scheduled in roadmap.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-4 py-2 text-left font-medium text-gray-600">Task</th>
                 <th className="px-4 py-2 text-left font-medium text-gray-600">Initiative</th>
-                <th className="px-4 py-2 text-left font-medium text-gray-600">Epic</th>
+                <th className="px-4 py-2 text-left font-medium text-gray-600">Workspace</th>
                 <th className="px-4 py-2 text-right font-medium text-gray-600">Hours</th>
                 <th className="px-4 py-2 text-right font-medium text-gray-600">Sprint</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {assignedItems.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2">
-                    <Link href={`/tasks/${item.id}`} className="text-indigo-600 hover:underline line-clamp-1">
-                      {item.title}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2">
-                    <Link href={`/planning/${item.projectId}`} className="text-gray-500 hover:text-indigo-600 hover:underline">
-                      {item.projectName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2">
-                    <Link href={`/epics/${item.epicId}`} className="text-gray-500 hover:text-indigo-600 hover:underline">
-                      {item.epicTitle}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2 text-right text-gray-500">{item.hours}h</td>
-                  <td className="px-4 py-2 text-right text-gray-500">{item.sprint != null ? `S${item.sprint}` : '—'}</td>
-                </tr>
-              ))}
+              {assignedItems.map((item) => {
+                const ws = item.workspace?.replace('ws-', '').toUpperCase() ?? ''
+                return (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2">
+                      <Link href={`/tasks/${item.id}`} className="text-indigo-600 hover:underline line-clamp-1">
+                        {item.title}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2">
+                      <Link href={`/planning/${item.projectId}`} className="text-gray-500 hover:text-indigo-600 hover:underline">
+                        {item.projectName}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2">
+                      {ws && (
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                          ws === 'EOL' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                        }`}>{ws}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right text-gray-500">{item.hours}h</td>
+                    <td className="px-4 py-2 text-right text-gray-500">S{item.sprint}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

@@ -42,11 +42,12 @@ export function promoteOrphanEpics(
       name: epic.title,
       status: 'not-started',
       portfolio: epic.portfolio,
-      priority: 'medium',
+      priority: 'low',
       stage: 'backlog',
-      epics: [epic],
+      planningType: 'documentation-support',
+      epics: [{ ...epic, planningProjectId: `auto-${epic.id}` }],
       sourceRefs: epic.sourceRefs,
-      notes: `Auto-promoted from orphan epic "${epic.id}" — link to a parent initiative when available.`,
+      notes: `Unclassified — link to a parent initiative when available.`,
     }
     promoted.push(newProject)
     knownIds.add(newProject.id)
