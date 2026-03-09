@@ -65,12 +65,18 @@ export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, on
     setSyncFlash('')
 
     try {
-      // Step 1: Fetch from Jira
+      // Step 1: Fetch from Jira (partial failures are non-fatal)
       setSyncStage('sync')
       const syncRes = await fetch('/api/jira/sync', { method: 'POST' })
       const syncData = await syncRes.json()
-      if (!syncRes.ok || syncData.errors?.length) {
-        throw new Error(syncData.errors?.join(', ') || syncData.error || 'Jira sync failed')
+      if (!syncRes.ok) {
+        // No credentials or hard server error — continue with existing snapshot data
+        setSyncError(syncData.error ?? 'No Jira credentials — using existing data')
+        setTimeout(() => setSyncError(''), 5000)
+      } else if (syncData.errors?.length) {
+        // One workspace failed — show as warning and continue with whatever was fetched
+        setSyncError(syncData.errors.join(' | '))
+        setTimeout(() => setSyncError(''), 6000)
       }
 
       // Step 2: Import snapshot → planning model
@@ -142,7 +148,7 @@ export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, on
     syncStage === 'sync' ? 'Fetching Jira…' :
     syncStage === 'import' ? 'Importing…' :
     syncStage === 'enhance' ? 'Enhancing…' :
-    syncFlash || 'Sync Jira'
+    syncFlash || 'Bootstrap Jira'
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg bg-white border border-gray-200 px-4 py-2.5 text-sm">
@@ -214,7 +220,7 @@ export function ScenarioBar({ projects, members, startDate, dataMode, onLoad, on
               ? 'bg-orange-400 text-white cursor-wait'
               : 'bg-[#f28c28] text-white hover:bg-[#e07d20]'
           } disabled:opacity-80`}
-          title="Sync issues from both Jira workspaces, enhance all items, and load into dashboard"
+          title="One-time bootstrap: fetch all issues from both Jira workspaces. Use per-initiative Sync on each initiative page for ongoing updates."
         >
           {syncStage !== null ? (
             <span className="flex items-center gap-1">

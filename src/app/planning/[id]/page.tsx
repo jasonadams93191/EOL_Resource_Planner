@@ -386,12 +386,14 @@ export default function InitiativePage() {
 
   // Fetch live projects from API (supports both seed and Jira-synced data)
   const [allProjects, setAllProjects] = useState<PlanningProject[] | null>(null)
-  useEffect(() => {
+  function loadProjects() {
     fetch('/api/planning')
       .then(r => r.json())
       .then(data => setAllProjects(data.projects ?? mockAllPlanningProjects))
       .catch(() => setAllProjects(mockAllPlanningProjects))
-  }, [])
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadProjects() }, [])
 
   const project = allProjects?.find((p) => p.id === id)
   const roadmap = useMemo(
@@ -463,8 +465,10 @@ export default function InitiativePage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Sync failed')
-      setSyncFlash(`✓ ${data.added} added, ${data.updated} updated`)
-      setTimeout(() => setSyncFlash(''), 4000)
+      // Reload projects so the page reflects freshly-synced Jira data
+      loadProjects()
+      setSyncFlash(`✓ ${data.fetched ?? data.added + data.updated} fetched · ${data.added} added, ${data.updated} updated`)
+      setTimeout(() => setSyncFlash(''), 5000)
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : 'Sync failed')
       setTimeout(() => setSyncError(''), 5000)

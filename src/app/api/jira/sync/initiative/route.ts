@@ -7,7 +7,7 @@
 //
 // Body: { initiativeId: string }
 //
-// Returns: { success, updated, added, total, fetchedAt }
+// Returns: { success, fetched, updated, added, fetchedAt }
 //
 // READ-ONLY — no Jira writes. Scope locked to EOL + ATI.
 // ============================================================
@@ -15,9 +15,43 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createEolClient, createAtiClient } from '@/lib/jira/client'
+import { getConfig } from '@/lib/config'
 import { INITIATIVE_GROUPING_RULES } from '@/lib/jira/grouping-rules'
 import { getSnapshotAsync, saveSnapshotAsync, buildSnapshotCounts } from '@/lib/jira/snapshot-store'
 import type { RawJiraIssue } from '@/lib/jira/client'
+
+function buildJql(projectKey: string, rule: (typeof INITIATIVE_GROUPING_RULES)[number]): string {
+  const jqlParts: string[] = [`project = "${projectKey}"`]
+  const orConditions: string[] = []
+
+  if (rule.matchLabels && rule.matchLabels.length > 0) {
+    // Jira Cloud uses `labels` (plural) not `label`
+    const labelList = rule.matchLabels.map((l) => `"${l}"`).join(', ')
+    orConditions.push(`labels IN (${labelList})`)
+  }
+
+  if (rule.matchSummaryPatterns && rule.matchSummaryPatterns.length > 0) {
+    // Use first pattern source, strip regex metacharacters for plain-text JQL search
+    const pattern = rule.matchSummaryPatterns[0].source
+      .replace(/[/\\^$*+?.()|[\]{}]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 40)
+    if (pattern) orConditions.push(`summary ~ "${pattern}"`)
+  }
+
+  if (rule.matchEpicKeys && rule.matchEpicKeys.length > 0) {
+    // Use `parent` only — "Epic Link" is deprecated in Jira Cloud next-gen projects
+    const epicKeyList = rule.matchEpicKeys.map((k) => `"${k}"`).join(', ')
+    orConditions.push(`parent IN (${epicKeyList})`)
+  }
+
+  if (orConditions.length > 0) {
+    jqlParts.push(`(${orConditions.join(' OR ')})`)
+  }
+
+  return jqlParts.join(' AND ') + ' ORDER BY updated DESC'
+}
 
 export async function POST(request: NextRequest) {
   let body: { initiativeId?: string }
@@ -41,35 +75,14 @@ export async function POST(request: NextRequest) {
   const errors: string[] = []
   const newIssuesByKey = new Map<string, RawJiraIssue>()
 
+  const config = getConfig()
+
   // ── Fetch from EOL workspace ─────────────────────────────────
   if (rule.matchProjectKeys.includes('EOL')) {
     const client = createEolClient()
     if (client.isConfigured) {
       try {
-        const jqlParts: string[] = [`project = "EOL"`]
-        const orConditions: string[] = []
-        if (rule.matchLabels && rule.matchLabels.length > 0) {
-          const labelList = rule.matchLabels.map((l) => `"${l}"`).join(', ')
-          orConditions.push(`label IN (${labelList})`)
-        }
-        if (rule.matchSummaryPatterns && rule.matchSummaryPatterns.length > 0) {
-          // Use the first pattern's source as a text search
-          const pattern = rule.matchSummaryPatterns[0].source
-            .replace(/[/\\^$*+?.()|[\]{}]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .substring(0, 40)
-          if (pattern) orConditions.push(`summary ~ "${pattern}"`)
-        }
-        if (rule.matchEpicKeys && rule.matchEpicKeys.length > 0) {
-          const epicKeyList = rule.matchEpicKeys.map((k) => `"${k}"`).join(', ')
-          orConditions.push(`"Epic Link" IN (${epicKeyList})`)
-          orConditions.push(`parent IN (${epicKeyList})`)
-        }
-        if (orConditions.length > 0) {
-          jqlParts.push(`(${orConditions.join(' OR ')})`)
-        }
-        const jql = jqlParts.join(' AND ') + ' ORDER BY updated DESC'
+        const jql = buildJql(config.eolJira.projectKey, rule)
         const issues = await client.fetchIssuesByJql(jql)
         for (const issue of issues) newIssuesByKey.set(issue.key, issue)
       } catch (err) {
@@ -83,29 +96,7 @@ export async function POST(request: NextRequest) {
     const client = createAtiClient()
     if (client.isConfigured) {
       try {
-        const jqlParts: string[] = [`project = "ATI"`]
-        const orConditions: string[] = []
-        if (rule.matchLabels && rule.matchLabels.length > 0) {
-          const labelList = rule.matchLabels.map((l) => `"${l}"`).join(', ')
-          orConditions.push(`label IN (${labelList})`)
-        }
-        if (rule.matchSummaryPatterns && rule.matchSummaryPatterns.length > 0) {
-          const pattern = rule.matchSummaryPatterns[0].source
-            .replace(/[/\\^$*+?.()|[\]{}]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .substring(0, 40)
-          if (pattern) orConditions.push(`summary ~ "${pattern}"`)
-        }
-        if (rule.matchEpicKeys && rule.matchEpicKeys.length > 0) {
-          const epicKeyList = rule.matchEpicKeys.map((k) => `"${k}"`).join(', ')
-          orConditions.push(`"Epic Link" IN (${epicKeyList})`)
-          orConditions.push(`parent IN (${epicKeyList})`)
-        }
-        if (orConditions.length > 0) {
-          jqlParts.push(`(${orConditions.join(' OR ')})`)
-        }
-        const jql = jqlParts.join(' AND ') + ' ORDER BY updated DESC'
+        const jql = buildJql(config.atiJira.projectKey, rule)
         const issues = await client.fetchIssuesByJql(jql)
         for (const issue of issues) newIssuesByKey.set(issue.key, issue)
       } catch (err) {
@@ -115,40 +106,45 @@ export async function POST(request: NextRequest) {
   }
 
   if (newIssuesByKey.size === 0 && errors.length > 0) {
-    return NextResponse.json({ error: 'Sync failed', errors }, { status: 500 })
+    return NextResponse.json({ error: 'Sync failed', errors }, { status: 400 })
   }
 
   // ── Merge into existing snapshots ────────────────────────────
   let totalUpdated = 0
   let totalAdded = 0
 
-  for (const ws of ['ws-eol', 'ws-ati'] as const) {
-    const projectKey = ws === 'ws-eol' ? 'EOL' : 'ATI'
-    const relevant = Array.from(newIssuesByKey.values()).filter(
-      (i) => i.key.startsWith(projectKey + '-')
-    )
-    if (relevant.length === 0) continue
+  try {
+    for (const ws of ['ws-eol', 'ws-ati'] as const) {
+      const projectKey = ws === 'ws-eol' ? 'EOL' : 'ATI'
+      const relevant = Array.from(newIssuesByKey.values()).filter(
+        (i) => i.key.startsWith(projectKey + '-')
+      )
+      if (relevant.length === 0) continue
 
-    const existing = await getSnapshotAsync(ws)
-    const issueMap = new Map<string, RawJiraIssue>(
-      (existing?.issues ?? []).map((i) => [i.key, i])
-    )
+      const existing = await getSnapshotAsync(ws)
+      const issueMap = new Map<string, RawJiraIssue>(
+        (existing?.issues ?? []).map((i) => [i.key, i])
+      )
 
-    for (const issue of relevant) {
-      if (issueMap.has(issue.key)) {
-        totalUpdated++
-      } else {
-        totalAdded++
+      for (const issue of relevant) {
+        if (issueMap.has(issue.key)) {
+          totalUpdated++
+        } else {
+          totalAdded++
+        }
+        issueMap.set(issue.key, issue)
       }
-      issueMap.set(issue.key, issue)
-    }
 
-    const mergedIssues = Array.from(issueMap.values())
-    await saveSnapshotAsync(ws, {
-      issues: mergedIssues,
-      fetchedAt,
-      counts: buildSnapshotCounts(mergedIssues),
-    })
+      const mergedIssues = Array.from(issueMap.values())
+      await saveSnapshotAsync(ws, {
+        issues: mergedIssues,
+        fetchedAt,
+        counts: buildSnapshotCounts(mergedIssues),
+      })
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: `Snapshot merge failed: ${msg}` }, { status: 500 })
   }
 
   return NextResponse.json({

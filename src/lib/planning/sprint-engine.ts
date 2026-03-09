@@ -351,7 +351,8 @@ export function buildSprintRoadmap(
   // This is surfaced via WorkItemPlacement for the UI to consume.
 
   const maxSprint = placements.reduce((m, p) => Math.max(m, p.sprintNumber), 1)
-  const totalSprints = Math.max(maxSprint, 1)
+  // Always show at least 13 sprints (~6 months) for planning horizon visibility
+  const totalSprints = Math.max(maxSprint, 13)
 
   const generatedSprints = generateSprints(totalSprints, startDate)
   const sprintDetails: SprintDetail[] = generatedSprints.map((s) => {

@@ -85,6 +85,33 @@ function quarterStart(iso: string): string {
   return `${y}-${String(q * 3 + 1).padStart(2, '0')}-01`
 }
 
+function fmtMonthShort(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', {
+    month: 'short', timeZone: 'UTC',
+  })
+}
+
+function isoWeekNumber(iso: string): number {
+  const d = new Date(iso + 'T00:00:00Z')
+  // ISO 8601 week: week containing Thursday
+  const jan4 = new Date(Date.UTC(d.getUTCFullYear(), 0, 4))
+  const startOfW1 = new Date(jan4)
+  startOfW1.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() + 6) % 7))
+  const diff = d.getTime() - startOfW1.getTime()
+  return 1 + Math.floor(diff / (7 * 86400000))
+}
+
+function weeksInRange(start: string, end: string): number[] {
+  const weeks: number[] = []
+  let cursor = start
+  while (cursor <= end) {
+    const wk = isoWeekNumber(cursor)
+    if (!weeks.includes(wk)) weeks.push(wk)
+    cursor = addDays(cursor, 7)
+  }
+  return weeks
+}
+
 function overlaps(colStart: string, colEnd: string, rowStart: string, rowEnd: string): boolean {
   return colStart <= rowEnd && colEnd >= rowStart
 }
@@ -123,7 +150,8 @@ function buildColumns(
       const sprintsInCol = allSprints.filter(
         (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
       )
-      const subLabel = sprintsInCol.map((s) => `S${s.number}`).join(' ')
+      // Sub-label: individual week start date (e.g. "Mar 9")
+      const subLabel = fmtShort(colStart)
       cols.push({
         key: colStart,
         label: `${fmtShort(colStart)}–${fmtShort(colEnd)}`,
@@ -143,7 +171,9 @@ function buildColumns(
       const sprintsInCol = allSprints.filter(
         (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
       )
-      const subLabel = sprintsInCol.map((s) => `S${s.number}`).join(' ')
+      // Sub-label: ISO week numbers within this month (e.g. "Wk10 · 11 · 12 · 13")
+      const wks = weeksInRange(colStart, colEnd)
+      const subLabel = wks.length > 0 ? `Wk${wks[0]}` + wks.slice(1).map(w => ` · ${w}`).join('') : ''
       cols.push({
         key: colStart,
         label: fmtMonth(colStart),
@@ -164,7 +194,10 @@ function buildColumns(
       const sprintsInCol = allSprints.filter(
         (s) => overlaps(colStart, colEnd, s.startDate, s.endDate)
       )
-      const subLabel = sprintsInCol.map((s) => `S${s.number}`).join(' ')
+      // Sub-label: 3 month abbreviations in this quarter (e.g. "Mar · Apr · May")
+      const subLabel = [colStart, addMonths(colStart, 1), addMonths(colStart, 2)]
+        .map(d => fmtMonthShort(d))
+        .join(' · ')
       cols.push({
         key: colStart,
         label: fmtQuarter(colStart),
