@@ -287,7 +287,7 @@ export type PlanningPriority = 'high' | 'medium' | 'low'
 // ── Manual Override ────────────────────────────────────────────
 // Tracks when a field has been manually overridden from its engine-computed value.
 export interface ManualOverride {
-  field: 'estimatedHours' | 'assigneeId' | 'primarySkill' | 'requiredSkillLevel' | 'sprintNumber'
+  field: 'estimatedHours' | 'assigneeId' | 'primarySkill' | 'requiredSkillLevel' | 'sprintNumber' | 'status' | 'confidence' | 'priority'
   originalValue: string | number
   overriddenValue: string | number
   note?: string

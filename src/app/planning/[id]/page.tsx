@@ -81,6 +81,12 @@ const ALL_PLANNING_TYPES = Object.entries(PLANNING_TYPE_LABELS) as [PlanningType
 interface LocalOverride {
   estimatedHours?: number
   assigneeId?: string
+  primarySkill?: string
+  requiredSkillLevel?: number
+  sprintNumber?: number
+  status?: string
+  confidence?: string
+  priority?: string
 }
 
 function WorkItemRow({
@@ -94,9 +100,16 @@ function WorkItemRow({
 }) {
   const placement = roadmap.workItemPlacements.find((p) => p.workItemId === item.id)
   const assignedMemberId = localOverride.assigneeId ?? placement?.assignedTeamMemberId ?? item.assigneeId
-  const assignedMember = assignedMemberId ? TEAM_MEMBERS.find((m) => m.id === assignedMemberId) : undefined
   const effortOverridden = localOverride.estimatedHours !== undefined
   const assigneeOverridden = localOverride.assigneeId !== undefined
+  const skillOverridden = localOverride.primarySkill !== undefined
+  const levelOverridden = localOverride.requiredSkillLevel !== undefined
+  const sprintOverridden = localOverride.sprintNumber !== undefined
+  const statusOverridden = localOverride.status !== undefined
+  const confidenceOverridden = localOverride.confidence !== undefined
+  const priorityOverridden = localOverride.priority !== undefined
+
+  const effectiveStatus = localOverride.status ?? item.status
 
   const candidates = rankCandidates(
     TEAM_MEMBERS,
@@ -104,16 +117,15 @@ function WorkItemRow({
     { currentSprintAllocations: {}, existingProjectAssignments: new Set() }
   ).slice(0, 3)
 
-  const skillName = item.primarySkill ? SKILLS.find((s) => s.id === item.primarySkill)?.name ?? item.primarySkill : null
   const readiness = workItemReadiness(item)
-  const hasManualOverrides = (item.manualOverrides?.length ?? 0) > 0 || effortOverridden || assigneeOverridden
+  const hasManualOverrides = (item.manualOverrides?.length ?? 0) > 0 || effortOverridden || assigneeOverridden || skillOverridden || levelOverridden || sprintOverridden || statusOverridden || confidenceOverridden || priorityOverridden
 
   return (
     <tr className={`border-t border-gray-100 text-sm ${hasManualOverrides ? 'bg-yellow-50' : 'bg-white'}`}>
       {/* Status dot + title */}
       <td className="px-3 py-2">
         <div className="flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[item.status] ?? 'bg-gray-300'}`} />
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[effectiveStatus] ?? 'bg-gray-300'}`} />
           {item.jira?.issueKey ? (
             item.jira.url ? (
               <a href={item.jira.url} target="_blank" rel="noopener noreferrer"
@@ -157,15 +169,34 @@ function WorkItemRow({
           <span className="text-gray-400 text-xs">h</span>
         </div>
       </td>
-      {/* Primary skill */}
+      {/* Primary skill (editable) */}
       <td className="px-3 py-2">
-        {skillName && (
-          <span className="text-xs rounded bg-indigo-50 text-indigo-700 px-1.5 py-0.5">{skillName}</span>
-        )}
+        <select
+          value={localOverride.primarySkill ?? item.primarySkill ?? ''}
+          onChange={(e) => onOverrideChange({ primarySkill: e.target.value || undefined })}
+          className={`text-xs border rounded px-1 py-0.5 max-w-[120px] ${skillOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+        >
+          <option value="">— None —</option>
+          {SKILLS.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
       </td>
-      {/* Required skill level */}
-      <td className="px-3 py-2 text-xs text-gray-500">
-        {item.requiredSkillLevel != null ? `Lv ${item.requiredSkillLevel}` : '—'}
+      {/* Required skill level (editable) */}
+      <td className="px-3 py-2">
+        <select
+          value={localOverride.requiredSkillLevel ?? item.requiredSkillLevel ?? ''}
+          onChange={(e) => {
+            const val = e.target.value === '' ? undefined : Number(e.target.value)
+            onOverrideChange({ requiredSkillLevel: val })
+          }}
+          className={`text-xs border rounded px-1 py-0.5 w-14 ${levelOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+        >
+          <option value="">—</option>
+          {[0, 1, 2, 3, 4].map((l) => (
+            <option key={l} value={l}>{l}</option>
+          ))}
+        </select>
       </td>
       {/* Assignee (editable) */}
       <td className="px-3 py-2">
@@ -179,9 +210,6 @@ function WorkItemRow({
             <option key={m.id} value={m.id}>{m.name}</option>
           ))}
         </select>
-        {assignedMember && (
-          <span className="text-xs text-gray-400 ml-1">{assignedMember.name}</span>
-        )}
       </td>
       {/* Top 3 candidates */}
       <td className="px-3 py-2">
@@ -196,22 +224,63 @@ function WorkItemRow({
           })}
         </div>
       </td>
-      {/* Sprint # */}
-      <td className="px-3 py-2 text-xs text-gray-500">
-        {placement ? `S${placement.sprintNumber}` : '—'}
+      {/* Sprint # (editable) */}
+      <td className="px-3 py-2">
+        <input
+          type="number"
+          min="1"
+          max="52"
+          value={localOverride.sprintNumber ?? item.sprintNumber ?? placement?.sprintNumber ?? ''}
+          onChange={(e) => {
+            const val = parseInt(e.target.value)
+            onOverrideChange({ sprintNumber: isNaN(val) ? undefined : val })
+          }}
+          placeholder="—"
+          className={`w-12 border rounded px-1 py-0.5 text-xs ${sprintOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+        />
+      </td>
+      {/* Status (editable) */}
+      <td className="px-3 py-2">
+        <select
+          value={localOverride.status ?? item.status}
+          onChange={(e) => onOverrideChange({ status: e.target.value })}
+          className={`text-xs border rounded px-1 py-0.5 ${statusOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+        >
+          {['not-started', 'in-progress', 'done', 'blocked', 'on-hold'].map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+      </td>
+      {/* Priority (editable) */}
+      <td className="px-3 py-2">
+        <select
+          value={localOverride.priority ?? item.priority ?? ''}
+          onChange={(e) => onOverrideChange({ priority: e.target.value || undefined })}
+          className={`text-xs border rounded px-1 py-0.5 capitalize ${priorityOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+        >
+          <option value="">—</option>
+          {['high', 'medium', 'low'].map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+      </td>
+      {/* Confidence (editable) */}
+      <td className="px-3 py-2">
+        <select
+          value={localOverride.confidence ?? item.confidence}
+          onChange={(e) => onOverrideChange({ confidence: e.target.value })}
+          className={`text-xs border rounded px-1 py-0.5 capitalize ${confidenceOverridden ? 'border-amber-400 bg-amber-50' : 'border-gray-200'}`}
+        >
+          {['high', 'medium', 'low'].map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
       </td>
       {/* Readiness */}
       <td className="px-3 py-2">
         <span className={`text-xs rounded px-1.5 py-0.5 ${ESTIMATE_READINESS_STYLES[readiness]}`}>
           {ESTIMATE_READINESS_LABELS[readiness]}
         </span>
-      </td>
-      {/* Confidence */}
-      <td className="px-3 py-2">
-        <div className="flex items-center gap-1">
-          <span className={`w-1.5 h-1.5 rounded-full ${CONFIDENCE_DOT[item.confidence] ?? 'bg-gray-300'}`} />
-          <span className="text-xs text-gray-500 capitalize">{item.confidence}</span>
-        </div>
       </td>
     </tr>
   )
@@ -276,8 +345,10 @@ function EpicPanel({
                   <th className="px-3 py-2">Assignee</th>
                   <th className="px-3 py-2">Top Candidates</th>
                   <th className="px-3 py-2">Sprint</th>
-                  <th className="px-3 py-2">Readiness</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Priority</th>
                   <th className="px-3 py-2">Confidence</th>
+                  <th className="px-3 py-2">Readiness</th>
                 </tr>
               </thead>
               <tbody>
@@ -749,6 +820,25 @@ export default function InitiativePage({ params }: { params: { id: string } }) {
               if (override.assigneeId !== undefined) {
                 const member = TEAM_MEMBERS.find((m) => m.id === override.assigneeId)
                 overrideList.push({ field: 'assigneeId', originalValue: item?.assigneeId ?? '', overriddenValue: member?.name ?? override.assigneeId })
+              }
+              if (override.primarySkill !== undefined) {
+                const skillLabel = SKILLS.find((s) => s.id === override.primarySkill)?.name ?? override.primarySkill
+                overrideList.push({ field: 'primarySkill', originalValue: item?.primarySkill ?? '', overriddenValue: skillLabel ?? '' })
+              }
+              if (override.requiredSkillLevel !== undefined) {
+                overrideList.push({ field: 'requiredSkillLevel', originalValue: item?.requiredSkillLevel ?? '', overriddenValue: override.requiredSkillLevel })
+              }
+              if (override.sprintNumber !== undefined) {
+                overrideList.push({ field: 'sprintNumber', originalValue: item?.sprintNumber ?? '', overriddenValue: override.sprintNumber })
+              }
+              if (override.status !== undefined) {
+                overrideList.push({ field: 'status', originalValue: item?.status ?? '', overriddenValue: override.status })
+              }
+              if (override.confidence !== undefined) {
+                overrideList.push({ field: 'confidence', originalValue: item?.confidence ?? '', overriddenValue: override.confidence })
+              }
+              if (override.priority !== undefined) {
+                overrideList.push({ field: 'priority', originalValue: item?.priority ?? '', overriddenValue: override.priority })
               }
               return overrideList.map((o, j) => (
                 <div key={`${itemId}-${j}`} className="text-xs text-yellow-700">
