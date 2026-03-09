@@ -11,7 +11,20 @@
 
 import { NextResponse } from 'next/server'
 import { createEolClient, createAtiClient } from '@/lib/jira/client'
-import { saveSnapshotAsync, buildSnapshotCounts } from '@/lib/jira/snapshot-store'
+import { saveSnapshotAsync, getAllSnapshotsAsync, buildSnapshotCounts } from '@/lib/jira/snapshot-store'
+
+export async function GET() {
+  const snapshots = await getAllSnapshotsAsync()
+  return NextResponse.json({
+    neonConfigured: Boolean(process.env.DATABASE_URL),
+    'ws-eol': snapshots['ws-eol']
+      ? { fetchedAt: snapshots['ws-eol'].fetchedAt, counts: snapshots['ws-eol'].counts }
+      : null,
+    'ws-ati': snapshots['ws-ati']
+      ? { fetchedAt: snapshots['ws-ati'].fetchedAt, counts: snapshots['ws-ati'].counts }
+      : null,
+  })
+}
 
 export async function POST() {
   const results: Record<string, unknown> = {}
